@@ -1,0 +1,2092 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cartographia — Editor de Mapas Fictícios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=Cinzel+Decorative:wght@700&family=Inter:wght@400;500;600;700&family=Spectral:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --void:#100c08;
+  --panel:#1a140e;
+  --panel2:#221a12;
+  --panel3:#2a2016;
+  --line:#3c2f1f;
+  --line-soft:#2c2318;
+  --gold:#c9a24b;
+  --gold-bright:#e0be74;
+  --gold-dim:#8a6f3a;
+  --parchment:#e9dcbe;
+  --ink:#d8cbb0;
+  --ink-dim:#9c8f77;
+  --rust:#b1552f;
+  --teal:#4a8577;
+  --danger:#b1452f;
+  --success:#6d8c53;
+  --radius:3px;
+  --shadow: 0 4px 18px rgba(0,0,0,.45);
+}
+[data-theme="light"]{
+  --void:#e7ddc6;
+  --panel:#f2ead4;
+  --panel2:#ece0c3;
+  --panel3:#e3d5ae;
+  --line:#c9b787;
+  --line-soft:#d6c69a;
+  --gold:#8a611f;
+  --gold-bright:#6b4a15;
+  --gold-dim:#a8823f;
+  --parchment:#fffaef;
+  --ink:#3a2f1c;
+  --ink-dim:#6b5c3e;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;margin:0;}
+body{
+  background:var(--void);
+  color:var(--ink);
+  font-family:'Inter',sans-serif;
+  overflow:hidden;
+  -webkit-font-smoothing:antialiased;
+}
+::selection{background:var(--gold-dim);color:#fff;}
+button, input, select{ font-family:inherit; color:inherit; }
+.hidden{display:none !important;}
+::-webkit-scrollbar{width:9px;height:9px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;}
+::-webkit-scrollbar-thumb:hover{background:var(--gold-dim);}
+
+/* ===== LAYOUT ===== */
+#app{ display:grid; grid-template-rows:auto 1fr auto; height:100%; }
+
+/* ---- Top bar ---- */
+#topbar{
+  display:flex; align-items:center; gap:14px;
+  padding:8px 14px;
+  background:linear-gradient(180deg,var(--panel2),var(--panel));
+  border-bottom:1px solid var(--line);
+  z-index:50;
+}
+#brand{ display:flex; align-items:center; gap:9px; margin-right:6px; }
+#brand .mark{
+  width:26px;height:26px; flex:none;
+}
+#brand .title{
+  font-family:'Cinzel Decorative', serif;
+  font-size:16px; color:var(--gold-bright); letter-spacing:.5px;
+  white-space:nowrap;
+}
+#brand .sub{ font-size:9px; color:var(--ink-dim); letter-spacing:2px; text-transform:uppercase; margin-top:-2px;}
+.topbtn{
+  display:flex; align-items:center; gap:6px;
+  background:var(--panel3); border:1px solid var(--line);
+  color:var(--ink); padding:6px 10px; border-radius:var(--radius);
+  font-size:12.5px; font-weight:500; cursor:pointer; white-space:nowrap;
+  transition:.12s;
+}
+.topbtn:hover{ border-color:var(--gold-dim); color:var(--gold-bright); background:var(--panel3); }
+.topbtn:active{ transform:translateY(1px); }
+.topbtn.primary{ background:linear-gradient(180deg,var(--gold-dim),#6b5528); color:#fff2d6; border-color:var(--gold-dim);}
+.topbtn svg{ width:14px;height:14px; flex:none; }
+#topbar .divider{ width:1px; align-self:stretch; background:var(--line); margin:0 2px;}
+.menu-wrap{ position:relative; }
+.menu-drop{
+  position:absolute; top:calc(100% + 6px); left:0;
+  background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius);
+  box-shadow:var(--shadow); min-width:200px; padding:5px; z-index:200;
+}
+.menu-drop button{
+  display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  background:none; border:none; color:var(--ink); padding:8px 9px; font-size:12.5px;
+  border-radius:var(--radius); cursor:pointer;
+}
+.menu-drop button:hover{ background:var(--panel3); color:var(--gold-bright); }
+.menu-drop .sep{ height:1px; background:var(--line); margin:4px 2px; }
+#topbar-status{ margin-left:auto; display:flex; align-items:center; gap:12px; font-size:11px; color:var(--ink-dim); }
+#topbar-status b{ color:var(--gold); font-weight:600; }
+#autosave-dot{ width:7px; height:7px; border-radius:50%; background:var(--success); transition:.3s; }
+#autosave-dot.saving{ background:var(--gold); }
+
+/* ---- Middle ---- */
+#middle{ display:grid; grid-template-columns:auto 1fr; min-height:0; }
+
+/* ---- Sidebar ---- */
+#sidebar{
+  width:290px; background:var(--panel); border-right:1px solid var(--line);
+  display:flex; flex-direction:column; min-height:0; transition:width .18s;
+}
+#sidebar.collapsed{ width:0; overflow:hidden; border-right:none; }
+#sidebar-tabs{ display:flex; border-bottom:1px solid var(--line); background:var(--panel2); flex:none;}
+.stab{
+  flex:1; padding:9px 2px; text-align:center; font-size:10px; letter-spacing:.4px;
+  color:var(--ink-dim); cursor:pointer; border-bottom:2px solid transparent; user-select:none;
+  display:flex; flex-direction:column; align-items:center; gap:3px;
+}
+.stab svg{ width:15px;height:15px; opacity:.75;}
+.stab:hover{ color:var(--ink); }
+.stab.active{ color:var(--gold-bright); border-bottom-color:var(--gold); background:var(--panel); }
+.stab.active svg{ opacity:1; }
+#sidebar-body{ flex:1; overflow-y:auto; padding:12px; min-height:0; }
+.panel-sec{ margin-bottom:16px; }
+.panel-sec h4{
+  font-family:'Cinzel',serif; font-size:11.5px; letter-spacing:1px; text-transform:uppercase;
+  color:var(--gold); margin:0 0 9px 0; padding-bottom:6px; border-bottom:1px solid var(--line-soft);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.field{ margin-bottom:10px; }
+.field label{ display:flex; justify-content:space-between; font-size:11.5px; color:var(--ink-dim); margin-bottom:4px; }
+.field label span.v{ color:var(--gold); font-weight:600; }
+input[type=range]{ width:100%; accent-color:var(--gold-dim); height:16px; }
+input[type=text], input[type=number], select, textarea{
+  width:100%; background:var(--void); border:1px solid var(--line); color:var(--ink);
+  padding:7px 8px; border-radius:var(--radius); font-size:12.5px;
+}
+input[type=text]:focus, input[type=number]:focus, select:focus, textarea:focus{ outline:none; border-color:var(--gold-dim); }
+input[type=color]{ width:36px; height:26px; border:1px solid var(--line); background:none; padding:0; border-radius:var(--radius); cursor:pointer;}
+.row{ display:flex; gap:7px; align-items:center; }
+.row.wrap{ flex-wrap:wrap; }
+.btn{
+  background:var(--panel3); border:1px solid var(--line); color:var(--ink);
+  padding:7px 10px; border-radius:var(--radius); font-size:12px; cursor:pointer; text-align:center;
+  transition:.12s;
+}
+.btn:hover{ border-color:var(--gold-dim); color:var(--gold-bright); }
+.btn.active{ background:var(--gold-dim); color:#20180a; border-color:var(--gold-dim); font-weight:600;}
+.btn.block{ width:100%; }
+.btn.danger:hover{ border-color:var(--danger); color:#e08066; }
+.grid3{ display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px; }
+.grid2{ display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+.tool-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; margin-bottom:4px;}
+.tool-btn{
+  aspect-ratio:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  background:var(--panel3); border:1px solid var(--line); border-radius:var(--radius); cursor:pointer; color:var(--ink-dim);
+  font-size:8.5px; text-align:center; padding:4px 2px; line-height:1.1;
+}
+.tool-btn svg{ width:17px; height:17px; }
+.tool-btn:hover{ color:var(--ink); border-color:var(--gold-dim); }
+.tool-btn.active{ color:var(--gold-bright); border-color:var(--gold); background:var(--panel2); box-shadow:inset 0 0 0 1px var(--gold); }
+.swatches{ display:grid; grid-template-columns:repeat(6,1fr); gap:5px; }
+.swatch{ aspect-ratio:1; border-radius:3px; cursor:pointer; border:2px solid transparent; position:relative;}
+.swatch.active{ border-color:var(--gold-bright); }
+.swatch .lbl{ position:absolute; bottom:-15px; left:0; right:0; text-align:center; font-size:7.5px; color:var(--ink-dim); white-space:nowrap; overflow:hidden;}
+.asset-lib{ display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+.asset-item{
+  aspect-ratio:1; background:var(--panel3); border:1px solid var(--line); border-radius:var(--radius);
+  display:flex; align-items:center; justify-content:center; cursor:grab; position:relative; overflow:hidden;
+}
+.asset-item svg{ width:60%; height:60%; }
+.asset-item img{ width:70%; height:70%; object-fit:contain; }
+.asset-item.active{ border-color:var(--gold); box-shadow:inset 0 0 0 1px var(--gold); }
+.kingdom-row{ display:flex; align-items:center; gap:7px; padding:6px 7px; background:var(--panel3); border-radius:var(--radius); margin-bottom:5px; border:1px solid transparent; cursor:pointer; }
+.kingdom-row.active{ border-color:var(--gold); }
+.kingdom-row .dot{ width:13px;height:13px;border-radius:50%; flex:none; border:1px solid rgba(255,255,255,.3);}
+.kingdom-row .name{ flex:1; font-size:12px; }
+.kingdom-row .del{ opacity:.4; cursor:pointer; font-size:11px;}
+.kingdom-row .del:hover{ opacity:1; color:var(--danger);}
+.era-row{ padding:8px 9px; background:var(--panel3); border-radius:var(--radius); margin-bottom:6px; cursor:pointer; border:1px solid transparent;}
+.era-row:hover{ border-color:var(--gold-dim); }
+.era-row .yr{ font-family:'Cinzel',serif; color:var(--gold); font-size:13px; }
+.era-row .nm{ font-size:11px; color:var(--ink-dim); margin-top:1px;}
+.layer-row{ display:flex; align-items:center; gap:8px; padding:6px 4px; font-size:12.5px; border-bottom:1px solid var(--line-soft); }
+.layer-row:last-child{ border-bottom:none;}
+.layer-row .nm{ flex:1; }
+.toggle{ width:32px; height:18px; border-radius:10px; background:var(--panel3); border:1px solid var(--line); position:relative; cursor:pointer; flex:none;}
+.toggle .knob{ width:14px;height:14px;border-radius:50%; background:var(--ink-dim); position:absolute; top:1px; left:1px; transition:.15s;}
+.toggle.on{ background:var(--gold-dim); border-color:var(--gold-dim); }
+.toggle.on .knob{ left:15px; background:#20180a; }
+.help{ font-size:10.5px; color:var(--ink-dim); line-height:1.5; margin-top:6px; }
+.slider-lbl{ display:flex; justify-content:space-between; margin-bottom:3px;}
+.compass-dial{ width:100%; display:flex; justify-content:center; padding:6px 0;}
+.dirbtns{ display:grid; grid-template-columns:repeat(3,1fr); gap:4px; width:120px; margin:8px auto 0;}
+.dirbtns .btn{ padding:6px; font-size:11px; }
+
+/* ---- Viewport ---- */
+#viewport-wrap{ position:relative; overflow:hidden; background:#0a0806; min-height:0;}
+[data-theme="light"] #viewport-wrap{ background:#c9bd9c; }
+#viewport-scroll{ position:absolute; inset:0; overflow:auto; }
+#viewport{ position:relative; transform-origin:0 0; }
+#viewport canvas{ position:absolute; top:0; left:0; image-rendering:optimizeSpeed; }
+#interactionCanvas{ cursor:crosshair; }
+#viewport-wrap.panning #interactionCanvas{ cursor:grab; }
+#viewport-wrap.panning-active #interactionCanvas{ cursor:grabbing; }
+
+.float-ui{ position:absolute; z-index:40; }
+#zoom-controls{ right:14px; bottom:14px; display:flex; flex-direction:column; background:var(--panel2); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; box-shadow:var(--shadow);}
+#zoom-controls button{ width:34px; height:32px; background:none; border:none; color:var(--ink); cursor:pointer; font-size:15px; border-bottom:1px solid var(--line);}
+#zoom-controls button:last-child{ border-bottom:none;}
+#zoom-controls button:hover{ background:var(--panel3); color:var(--gold-bright);}
+#zoom-pct{ text-align:center; font-size:9.5px; padding:4px 0; color:var(--ink-dim); background:var(--panel);}
+
+#compass{ left:14px; bottom:14px; width:58px; height:58px; cursor:pointer; filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)); }
+#compass:hover circle.face{ stroke:var(--gold-bright); }
+
+#scalebar{ left:14px; bottom:84px; background:rgba(20,15,9,.72); border:1px solid var(--line); border-radius:var(--radius); padding:6px 10px; font-size:10.5px; color:var(--parchment);}
+[data-theme=light] #scalebar{ background:rgba(255,250,235,.8); }
+#scalebar .bar{ height:4px; border:1px solid var(--parchment); border-top:none; margin-top:3px;}
+
+#coord-readout{ top:12px; right:14px; background:rgba(20,15,9,.72); border:1px solid var(--line); border-radius:var(--radius); padding:6px 10px; font-size:10.5px; color:var(--ink-dim); text-align:right;}
+[data-theme=light] #coord-readout{ background:rgba(255,250,235,.8); }
+
+#tool-hint{ top:12px; left:50%; transform:translateX(-50%); background:rgba(20,15,9,.78); border:1px solid var(--line); border-radius:20px; padding:7px 16px; font-size:11.5px; color:var(--gold-bright); white-space:nowrap;}
+[data-theme=light] #tool-hint{ background:rgba(255,250,235,.85); }
+
+/* brush size preview */
+#brush-cursor{ position:absolute; border:1.5px solid var(--gold-bright); border-radius:50%; pointer-events:none; transform:translate(-50%,-50%); mix-blend-mode:difference; display:none; }
+
+/* ---- Bottom bar ---- */
+#bottombar{ display:flex; align-items:center; gap:16px; padding:5px 14px; background:var(--panel2); border-top:1px solid var(--line); font-size:10.5px; color:var(--ink-dim); }
+#bottombar b{ color:var(--gold); }
+#bottombar .sep{ opacity:.4; }
+
+/* Context / properties popup for selected label/asset */
+#context-panel{
+  position:absolute; z-index:60; background:var(--panel2); border:1px solid var(--gold-dim); border-radius:var(--radius);
+  padding:10px; box-shadow:var(--shadow); width:220px; font-size:12px;
+}
+#context-panel h5{ margin:0 0 8px; font-family:'Cinzel',serif; color:var(--gold); font-size:11px; letter-spacing:.5px; text-transform:uppercase;}
+#context-panel .row{ margin-bottom:7px; }
+
+/* Modal */
+#modal-overlay{ position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:500; display:flex; align-items:center; justify-content:center; }
+#modal-box{ background:var(--panel2); border:1px solid var(--gold-dim); border-radius:6px; padding:22px; width:340px; box-shadow:var(--shadow); }
+#modal-box h3{ font-family:'Cinzel',serif; color:var(--gold-bright); margin:0 0 14px; font-size:15px;}
+#modal-box .actions{ display:flex; gap:8px; margin-top:16px; justify-content:flex-end;}
+
+/* Toast */
+#toast-wrap{ position:fixed; bottom:50px; left:50%; transform:translateX(-50%); z-index:600; display:flex; flex-direction:column; gap:6px; align-items:center;}
+.toast{ background:var(--panel2); border:1px solid var(--gold-dim); color:var(--parchment); padding:9px 16px; border-radius:20px; font-size:12.5px; box-shadow:var(--shadow); animation:toastin .2s ease; }
+@keyframes toastin{ from{opacity:0; transform:translateY(8px);} to{opacity:1; transform:translateY(0);} }
+
+/* Loading veil */
+#veil{ position:fixed; inset:0; background:var(--void); z-index:1000; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:14px; transition:opacity .4s; }
+#veil .rose{ width:70px; height:70px; animation:spin 3s linear infinite; }
+@keyframes spin{ to{ transform:rotate(360deg); } }
+#veil p{ font-family:'Cinzel',serif; color:var(--gold); letter-spacing:1.5px; font-size:12px;}
+
+@media (max-width:820px){
+  #sidebar{ position:absolute; z-index:80; height:100%; box-shadow:var(--shadow); }
+  #brand .sub{ display:none; }
+}
+</style>
+</head>
+<body data-theme="dark">
+
+<div id="veil"><svg class="rose" viewBox="0 0 100 100"><g fill="none" stroke="#c9a24b" stroke-width="1.5"><circle cx="50" cy="50" r="34"/><path d="M50 6 L58 44 L50 50 L42 44 Z" fill="#c9a24b" stroke="none"/><path d="M50 94 L58 56 L50 50 L42 56 Z" fill="#8a6f3a" stroke="none"/><path d="M6 50 L44 42 L50 50 L44 58 Z" fill="#8a6f3a" stroke="none"/><path d="M94 50 L56 58 L50 50 L56 42 Z" fill="#8a6f3a" stroke="none"/><circle cx="50" cy="50" r="4" fill="#e0be74" stroke="none"/></g></svg><p>PREPARANDO O ATLAS…</p></div>
+
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div id="brand">
+      <svg class="mark" viewBox="0 0 100 100"><g fill="none" stroke="#c9a24b" stroke-width="4"><circle cx="50" cy="50" r="30"/><path d="M50 12 L58 44 L50 50 L42 44 Z" fill="#c9a24b" stroke="none"/><path d="M50 88 L58 56 L50 50 L42 56 Z" fill="#8a6f3a" stroke="none"/></g></svg>
+      <div><div class="title">Cartographia</div><div class="sub">Editor de Mapas Fictícios</div></div>
+    </div>
+    <div class="divider"></div>
+
+    <div class="menu-wrap">
+      <button class="topbtn" id="btn-file-menu">📜 Arquivo ▾</button>
+      <div class="menu-drop hidden" id="menu-file">
+        <button id="m-new">✦ Novo mapa</button>
+        <button id="m-save-cache">💾 Salvar no cache do navegador</button>
+        <button id="m-load-cache">📂 Carregar do cache</button>
+        <div class="sep"></div>
+        <button id="m-export-json">⬇ Exportar projeto (.json)</button>
+        <button id="m-import-json">⬆ Importar projeto (.json)</button>
+        <div class="sep"></div>
+        <button id="m-export-png">🖼 Exportar imagem (PNG)</button>
+        <button id="m-export-svg">✒ Exportar vetor (SVG)</button>
+        <button id="m-export-tiles">🗺 Exportar tiles para VTT (.zip)</button>
+      </div>
+    </div>
+
+    <div class="menu-wrap">
+      <button class="topbtn" id="btn-gen-menu">🌍 Gerar ▾</button>
+      <div class="menu-drop hidden" id="menu-gen">
+        <button id="g-continent">Continente (Perlin)</button>
+        <button id="g-archipelago">Arquipélago</button>
+        <button id="g-voronoi">Ilhas por Voronoi</button>
+        <div class="sep"></div>
+        <button id="g-clear">Limpar terreno (nível do mar)</button>
+      </div>
+    </div>
+
+    <button class="topbtn" id="btn-undo" title="Desfazer (Ctrl+Z)">↶</button>
+    <button class="topbtn" id="btn-redo" title="Refazer (Ctrl+Y)">↷</button>
+
+    <div class="divider"></div>
+    <button class="topbtn" id="btn-theme">🌗 Tema</button>
+    <button class="topbtn" id="btn-sidebar-toggle">◧ Painel</button>
+
+    <div id="topbar-status">
+      <span id="autosave-dot" title="Estado do cache"></span>
+      <span id="autosave-txt">cache atualizado</span>
+      <span class="sep">·</span>
+      <span>Era: <b id="status-era">Presente</b></span>
+    </div>
+  </div>
+
+  <!-- MIDDLE -->
+  <div id="middle">
+    <div id="sidebar">
+      <div id="sidebar-tabs">
+        <div class="stab active" data-tab="ferramentas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 6l4 4-9 9-4 1 1-4z"/></svg>Ferramentas</div>
+        <div class="stab" data-tab="camadas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2l9 5-9 5-9-5 9-5z"/><path d="M3 12l9 5 9-5"/><path d="M3 17l9 5 9-5"/></svg>Camadas</div>
+        <div class="stab" data-tab="reinos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6"/></svg>Reinos</div>
+        <div class="stab" data-tab="tempo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Época</div>
+        <div class="stab" data-tab="mapa"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M2 12h20M12 2c3 3 3 17 0 20M12 2c-3 3-3 17 0 20"/></svg>Mapa</div>
+      </div>
+      <div id="sidebar-body">
+        <!-- painels preenchidos via JS -->
+      </div>
+    </div>
+
+    <div id="viewport-wrap">
+      <div id="viewport-scroll">
+        <div id="viewport">
+          <canvas id="terrainCanvas"></canvas>
+          <canvas id="politicalCanvas"></canvas>
+          <canvas id="riversRoutesCanvas"></canvas>
+          <canvas id="gridCanvas"></canvas>
+          <canvas id="assetsLabelsCanvas"></canvas>
+          <canvas id="interactionCanvas"></canvas>
+          <div id="brush-cursor"></div>
+        </div>
+      </div>
+
+      <div class="float-ui" id="tool-hint">Pincel de Elevação — clique e arraste para esculpir</div>
+      <div class="float-ui" id="coord-readout">X: 0 &nbsp; Y: 0<br>Alt: —</div>
+
+      <svg class="float-ui" id="compass" viewBox="0 0 100 100" title="Centralizar visão">
+        <circle class="face" cx="50" cy="50" r="42" fill="rgba(20,15,9,.55)" stroke="#c9a24b" stroke-width="1.5"/>
+        <g fill="#c9a24b"><path d="M50 12 L57 46 L50 50 L43 46 Z"/><path d="M50 88 L57 54 L50 50 L43 54 Z" opacity=".55"/><path d="M12 50 L46 43 L50 50 L46 57 Z" opacity=".55"/><path d="M88 50 L54 43 L50 50 L54 57 Z" opacity=".55"/></g>
+        <text x="50" y="10" text-anchor="middle" fill="#e0be74" font-size="9" font-family="Cinzel,serif">N</text>
+        <circle cx="50" cy="50" r="3" fill="#e0be74"/>
+      </svg>
+
+      <div class="float-ui" id="scalebar">
+        <div id="scalebar-label">50 km</div>
+        <div class="bar" id="scalebar-bar" style="width:80px;"></div>
+      </div>
+
+      <div class="float-ui" id="zoom-controls">
+        <button id="zoom-in">+</button>
+        <div id="zoom-pct">100%</div>
+        <button id="zoom-out">–</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div id="bottombar">
+    <span>Ferramenta: <b id="bb-tool">Elevação</b></span>
+    <span class="sep">|</span>
+    <span>Grade: <b id="bb-grid">Desligada</b></span>
+    <span class="sep">|</span>
+    <span>Escala: <b id="bb-scale">1 célula = 12 km</b></span>
+    <span class="sep">|</span>
+    <span id="bb-selection"></span>
+    <span style="margin-left:auto;">Cartographia · trabalha 100% no seu navegador — nada é enviado a servidores</span>
+  </div>
+</div>
+
+<div id="toast-wrap"></div>
+<input type="file" id="file-import-json" accept=".json" class="hidden">
+<input type="file" id="file-import-asset" accept=".png,.svg" class="hidden">
+
+<script>
+/* ============================================================================================
+   CARTOGRAPHIA — EDITOR DE MAPAS FICTÍCIOS
+   Tudo roda no navegador: canvas 2D em camadas, geração procedural por ruído, hidrologia,
+   clima/biomas, política, rotas comerciais, ativos, tipografia e linha do tempo.
+   Persistência: armazenamento próprio do artefato (chave/valor, sobrevive entre sessões) +
+   exportação/importação de arquivos .json / .png / .svg / tiles .zip.
+   ============================================================================================ */
+(function(){
+"use strict";
+
+/* ---------------------------------------------------------------------------------------
+   0. CONSTANTES E ESTADO GLOBAL
+--------------------------------------------------------------------------------------- */
+const GRID_W = 220, GRID_H = 140;   // resolução do heightmap
+const CELL = 6;                      // px por célula na resolução intrínseca do canvas
+const CW = GRID_W*CELL, CH = GRID_H*CELL;
+
+const BIOMES = [
+  {id:0,  name:"Oceano Profundo",   color:[16,38,58]},
+  {id:1,  name:"Mar Raso",          color:[31,72,97]},
+  {id:2,  name:"Praia",             color:[214,196,140]},
+  {id:3,  name:"Deserto",           color:[210,178,109]},
+  {id:4,  name:"Savana",            color:[178,167,84]},
+  {id:5,  name:"Pradaria",          color:[126,150,74]},
+  {id:6,  name:"Floresta Temperada",color:[70,110,63]},
+  {id:7,  name:"Floresta Tropical", color:[36,92,58]},
+  {id:8,  name:"Pântano",           color:[73,88,58]},
+  {id:9,  name:"Estepe Fria",       color:[143,144,112]},
+  {id:10, name:"Taiga",             color:[57,84,68]},
+  {id:11, name:"Tundra",            color:[151,160,150]},
+  {id:12, name:"Gelo Polar",        color:[221,231,233]},
+  {id:13, name:"Montanha Rochosa",  color:[103,92,80]},
+  {id:14, name:"Pico Nevado",       color:[240,242,244]},
+];
+const OCEAN_IDS = new Set([0,1]);
+
+const ASSET_DEFS = [
+  {id:"montanha", name:"Montanha", cat:"relevo"},
+  {id:"vulcao",    name:"Vulcão",   cat:"relevo"},
+  {id:"arvore",    name:"Floresta", cat:"natureza"},
+  {id:"palmeira",  name:"Oásis",    cat:"natureza"},
+  {id:"vila",      name:"Vila",     cat:"assentamento"},
+  {id:"cidade",    name:"Cidade",   cat:"assentamento"},
+  {id:"castelo",   name:"Castelo",  cat:"assentamento"},
+  {id:"porto",     name:"Porto",    cat:"assentamento"},
+  {id:"ruina",     name:"Ruína",    cat:"marco"},
+  {id:"torre",     name:"Torre Mágica", cat:"marco"},
+  {id:"monstro",   name:"Monstro Marinho", cat:"criatura"},
+  {id:"dragao",    name:"Covil de Dragão", cat:"criatura"},
+];
+
+function freshState(){
+  return {
+    version:1,
+    seed: Math.floor(Math.random()*99999),
+    name:"Mapa sem título",
+    elevation:new Float32Array(GRID_W*GRID_H).fill(0.38),
+    moisture:new Float32Array(GRID_W*GRID_H).fill(0.5),
+    biomeOverride:new Int16Array(GRID_W*GRID_H).fill(-1),
+    political:new Int16Array(GRID_W*GRID_H).fill(-1),
+    riverCell:new Uint8Array(GRID_W*GRID_H),
+    kingdoms:[],
+    rivers:[],
+    routes:[],
+    assets:[],
+    labels:[],
+    customAssets:{},
+    settings:{
+      seaLevel:0.47, windDir:"W", equatorRow: Math.floor(GRID_H*0.5),
+      gridType:"none", gridSpacing:8, gridOpacity:0.35, snapGrid:false,
+      scaleUnit:"km", kmPerCell:12, respectRivers:true, respectMountains:true, overwritePolitical:false,
+      theme:"dark"
+    },
+    timeline:[],
+    nextId:1
+  };
+}
+let S = freshState();
+let view = { zoom:1, panX:40, panY:40 };
+let activeTool = "elev";
+let activeSub = { elevMode:"raise", brushSize:9, brushStrength:0.045, moistMode:"raise",
+                  biomePaint:6, riverMode:"manual", assetType:"cidade", assetScale:1, assetColor:"#c9a24b",
+                  labelMode:"reto", labelSize:16, labelColor:"#e9dcbe", labelFont:"Cinzel", labelText:"Novo Rótulo",
+                  routeType:"terrestre", kingdomActive:null };
+let historyStack = [], historyIdx = -1;
+let curPathPoints = []; // para rio manual / rota / texto curvo
+let selection = null; // {type:'asset'|'label', id}
+let isPointerDown = false;
+let autosaveTimer = null;
+
+/* ---------------------------------------------------------------------------------------
+   1. RUÍDO (value-noise determinístico + fBm) — sem dependências externas
+--------------------------------------------------------------------------------------- */
+function makeRNG(seed){
+  let s = seed>>>0 || 1;
+  return function(){ s ^= s<<13; s ^= s>>>17; s ^= s<<5; s>>>=0; return (s>>>0)/4294967296; };
+}
+function buildPermutation(seed){
+  const rnd = makeRNG(seed);
+  const p = new Uint8Array(256);
+  for(let i=0;i<256;i++) p[i]=i;
+  for(let i=255;i>0;i--){ const j=Math.floor(rnd()*(i+1)); const t=p[i]; p[i]=p[j]; p[j]=t; }
+  const perm = new Uint8Array(512);
+  for(let i=0;i<512;i++) perm[i]=p[i&255];
+  return perm;
+}
+function fade(t){ return t*t*t*(t*(t*6-15)+10); }
+function lerp(a,b,t){ return a+(b-a)*t; }
+function grad2(hash,x,y){
+  const h = hash & 7;
+  const gx = [1,-1,1,-1,1,-1,0,0][h], gy=[1,1,-1,-1,0,0,1,-1][h];
+  return gx*x+gy*y;
+}
+function perlin2(perm,x,y){
+  const X = Math.floor(x)&255, Y=Math.floor(y)&255;
+  const xf = x-Math.floor(x), yf = y-Math.floor(y);
+  const u = fade(xf), v = fade(yf);
+  const aa = perm[perm[X]+Y], ab = perm[perm[X]+Y+1], ba = perm[perm[X+1]+Y], bb = perm[perm[X+1]+Y+1];
+  const x1 = lerp(grad2(aa,xf,yf), grad2(ba,xf-1,yf), u);
+  const x2 = lerp(grad2(ab,xf,yf-1), grad2(bb,xf-1,yf-1), u);
+  return (lerp(x1,x2,v)+1)/2;
+}
+function fbm(perm,x,y,octaves,persistence,lacunarity){
+  let total=0, freq=1, amp=1, maxAmp=0;
+  for(let i=0;i<octaves;i++){
+    total += perlin2(perm, x*freq, y*freq)*amp;
+    maxAmp += amp; amp*=persistence; freq*=lacunarity;
+  }
+  return total/maxAmp;
+}
+
+/* ---------------------------------------------------------------------------------------
+   2. GERAÇÃO PROCEDURAL DE TERRENO
+--------------------------------------------------------------------------------------- */
+function generateContinent(mode){
+  const perm = buildPermutation(S.seed);
+  const perm2 = buildPermutation(S.seed+777);
+  const cx = GRID_W/2, cy = GRID_H/2;
+  const maxD = Math.sqrt(cx*cx+cy*cy);
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      const idx = y*GRID_W+x;
+      let n = fbm(perm, x/55, y/55, 6, 0.52, 2.05);
+      let island = 0;
+      if(mode==="continent"){
+        const d = Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy))/maxD;
+        island = Math.max(0, 1-Math.pow(d*1.35,2.2));
+        n = n*0.72 + island*0.5;
+      } else if(mode==="archipelago"){
+        const d = Math.sqrt((x-cx)*(x-cx)+(y-cy)*(y-cy))/maxD;
+        island = Math.max(0, 1-Math.pow(d*1.05,1.6));
+        const warp = fbm(perm2, x/30,y/30,4,0.5,2.1);
+        n = (n*0.55 + warp*0.55) * (0.35+island*0.9);
+      }
+      S.elevation[idx] = Math.min(1,Math.max(0,n));
+      S.moisture[idx] = fbm(perm2, x/40+50, y/40+50, 4, 0.55, 2.0);
+    }
+  }
+  if(mode==="voronoi") generateVoronoiIslands();
+  S.riverCell.fill(0); S.rivers=[];
+  computeWindMoisture();
+  pushHistory("Gerar terreno");
+  scheduleRenderAll();
+}
+function generateVoronoiIslands(){
+  const rnd = makeRNG(S.seed+42);
+  const n = 9+Math.floor(rnd()*6);
+  const pts=[];
+  for(let i=0;i<n;i++) pts.push({x:rnd()*GRID_W, y:rnd()*GRID_H, r:26+rnd()*46});
+  const perm = buildPermutation(S.seed+13);
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      let best=1e9;
+      for(const p of pts){ const d=Math.hypot(x-p.x,y-p.y)-p.r; if(d<best) best=d; }
+      const n2 = fbm(perm,x/25,y/25,4,0.5,2.1);
+      const idx=y*GRID_W+x;
+      const val = 0.5 - best/40 + (n2-0.5)*0.35;
+      S.elevation[idx] = Math.min(1,Math.max(0, val));
+    }
+  }
+}
+function clearTerrain(){
+  S.elevation.fill(0.38); S.moisture.fill(0.5); S.riverCell.fill(0);
+  S.rivers=[]; S.biomeOverride.fill(-1); S.political.fill(-1);
+  pushHistory("Limpar terreno");
+  scheduleRenderAll();
+}
+
+/* ---------------------------------------------------------------------------------------
+   3. EROSÃO TÉRMICA/HIDRÁULICA SIMPLIFICADA
+--------------------------------------------------------------------------------------- */
+function runErosion(iterations, strength){
+  const talus = 0.006;
+  for(let it=0; it<iterations; it++){
+    const delta = new Float32Array(GRID_W*GRID_H);
+    for(let y=1;y<GRID_H-1;y++){
+      for(let x=1;x<GRID_W-1;x++){
+        const idx=y*GRID_W+x; const h=S.elevation[idx];
+        let lowestIdx=-1, lowestH=h;
+        for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+          if(!dx&&!dy) continue;
+          const ni=(y+dy)*GRID_W+(x+dx); const nh=S.elevation[ni];
+          if(nh<lowestH){ lowestH=nh; lowestIdx=ni; }
+        }
+        if(lowestIdx>=0){
+          const diff = h-lowestH;
+          if(diff>talus){
+            const move = diff*strength;
+            delta[idx]-=move; delta[lowestIdx]+=move;
+          }
+        }
+      }
+    }
+    for(let i=0;i<S.elevation.length;i++){ S.elevation[i]=Math.min(1,Math.max(0,S.elevation[i]+delta[i])); }
+  }
+  // leve ruído de textura pós-erosão
+  const perm = buildPermutation(S.seed+9001);
+  for(let y=0;y<GRID_H;y++)for(let x=0;x<GRID_W;x++){
+    const idx=y*GRID_W+x;
+    const micro = (fbm(perm,x/9,y/9,2,0.5,2)-0.5)*0.012;
+    S.elevation[idx]=Math.min(1,Math.max(0,S.elevation[idx]+micro));
+  }
+  pushHistory("Simular erosão");
+  scheduleRenderAll();
+}
+
+/* ---------------------------------------------------------------------------------------
+   4. CLIMA — VENTO E UMIDADE (SOMBRA DE CHUVA)
+--------------------------------------------------------------------------------------- */
+const WIND_VECTORS = { N:[0,1], S:[0,-1], L:[-1,0], O:[1,0], NE:[-0.7,0.7], NO:[0.7,0.7], SE:[-0.7,-0.7], SO:[0.7,-0.7] };
+function computeWindMoisture(){
+  const [dx,dy] = WIND_VECTORS[S.settings.windDir] || WIND_VECTORS.O;
+  const steps = Math.max(GRID_W,GRID_H);
+  const carried = new Float32Array(GRID_W*GRID_H).fill(-1);
+  // percorre a partir das bordas de barlavento
+  const startCells = [];
+  if(dx>0) for(let y=0;y<GRID_H;y++) startCells.push([0,y]);
+  else if(dx<0) for(let y=0;y<GRID_H;y++) startCells.push([GRID_W-1,y]);
+  if(dy>0) for(let x=0;x<GRID_W;x++) startCells.push([x,GRID_H-1]);
+  else if(dy<0) for(let x=0;x<GRID_W;x++) startCells.push([x,0]);
+  const perm = buildPermutation(S.seed+321);
+  for(const [sx,sy] of startCells){
+    let cx=sx, cy=sy, moisture = 1.0;
+    for(let i=0;i<steps;i++){
+      const gx=Math.round(cx), gy=Math.round(cy);
+      if(gx<0||gx>=GRID_W||gy<0||gy>=GRID_H) break;
+      const idx=gy*GRID_W+gx;
+      const isOcean = S.elevation[idx] < S.settings.seaLevel;
+      if(isOcean) moisture = Math.min(1, moisture+0.045);
+      else{
+        const elevPenalty = Math.max(0, S.elevation[idx]-S.settings.seaLevel)*1.6;
+        moisture = Math.max(0.03, moisture - elevPenalty*0.12 - 0.006);
+      }
+      if(carried[idx]<0 || moisture>carried[idx]) carried[idx]=moisture;
+      cx+=dx; cy+=dy;
+    }
+  }
+  for(let i=0;i<S.moisture.length;i++){
+    const base = carried[i]<0?0.5:carried[i];
+    const n = fbm(perm,(i%GRID_W)/33,Math.floor(i/GRID_W)/33,3,0.5,2.1);
+    S.moisture[i] = Math.min(1,Math.max(0, base*0.78 + n*0.22));
+  }
+  scheduleRenderAll();
+}
+
+/* ---------------------------------------------------------------------------------------
+   5. CLASSIFICAÇÃO DE BIOMAS
+--------------------------------------------------------------------------------------- */
+function latitudeFactor(y){
+  const d = Math.abs(y - S.settings.equatorRow) / Math.max(S.settings.equatorRow, GRID_H-S.settings.equatorRow);
+  return Math.min(1, d); // 0 = equador, 1 = polo
+}
+function classifyBiome(idx,x,y){
+  const override = S.biomeOverride[idx];
+  if(override>=0) return override;
+  const e = S.elevation[idx], m = S.moisture[idx];
+  const sea = S.settings.seaLevel;
+  if(e < sea-0.05) return 0;
+  if(e < sea) return 1;
+  if(e < sea+0.025) return 2;
+  const lat = latitudeFactor(y);
+  const temp = Math.max(0, Math.min(1, (1-lat)*1.05 - Math.max(0,e-sea)*0.9));
+  if(e>0.90) return 14;
+  if(e>0.80) return 13;
+  if(temp<0.16) return m>0.45?11:12;
+  if(temp<0.30) return m>0.5?10:9;
+  if(temp<0.55){
+    if(m>0.6) return 6;
+    if(m>0.32) return 5;
+    return 9;
+  }
+  // quente
+  if(m>0.66) return 7;
+  if(m>0.42) return 6;
+  if(m>0.22) return 4;
+  return 3;
+}
+
+/* ---------------------------------------------------------------------------------------
+   6. RIOS
+--------------------------------------------------------------------------------------- */
+function elevAt(x,y){ return S.elevation[y*GRID_W+x]; }
+function traceRiverFrom(sx,sy){
+  const path=[[sx,sy]];
+  let x=sx,y=sy, steps=0;
+  const visited = new Set([y*GRID_W+x]);
+  while(steps++<400){
+    if(elevAt(x,y) < S.settings.seaLevel) break;
+    if(S.riverCell[y*GRID_W+x] && steps>1) break;
+    let bestX=x,bestY=y,bestE=elevAt(x,y);
+    for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+      if(!dx&&!dy) continue;
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||nx>=GRID_W||ny<0||ny>=GRID_H) continue;
+      const ne = elevAt(nx,ny);
+      if(ne<bestE){ bestE=ne; bestX=nx; bestY=ny; }
+    }
+    if(bestX===x && bestY===y){
+      S.elevation[y*GRID_W+x]=Math.max(S.settings.seaLevel-0.01, elevAt(x,y)-0.015); // pequena escavação p/ evitar poças
+      let done=false;
+      for(let dy=-1;dy<=1&&!done;dy++)for(let dx=-1;dx<=1&&!done;dx++){
+        if(!dx&&!dy) continue;
+        const nx=x+dx, ny=y+dy;
+        if(nx<0||nx>=GRID_W||ny<0||ny>=GRID_H) continue;
+        if(!visited.has(ny*GRID_W+nx)){ bestX=nx; bestY=ny; done=true; }
+      }
+      if(!done) break;
+    }
+    x=bestX; y=bestY;
+    visited.add(y*GRID_W+x);
+    path.push([x,y]);
+  }
+  if(path.length<3) return null;
+  return path;
+}
+function addRiver(path){
+  const id = S.nextId++;
+  S.rivers.push({id,points:path});
+  for(const [gx,gy] of path){ S.riverCell[gy*GRID_W+gx]=1; }
+  return id;
+}
+function autoGenerateRivers(count){
+  const candidates=[];
+  for(let y=2;y<GRID_H-2;y++)for(let x=2;x<GRID_W-2;x++){
+    const e = elevAt(x,y);
+    if(e>0.72 && e<0.93) candidates.push({x,y,e});
+  }
+  candidates.sort((a,b)=>b.e-a.e);
+  let added=0;
+  const used = new Set();
+  for(const c of candidates){
+    if(added>=count) break;
+    const key = Math.floor(c.x/10)+","+Math.floor(c.y/10);
+    if(used.has(key)) continue;
+    const path = traceRiverFrom(c.x,c.y);
+    if(path && path.length>10){ addRiver(path); used.add(key); added++; }
+  }
+  pushHistory("Gerar rios");
+  scheduleRenderVector();
+}
+
+/* ---------------------------------------------------------------------------------------
+   7. POLÍTICA — PREENCHIMENTO DE TERRITÓRIO
+--------------------------------------------------------------------------------------- */
+function floodFillTerritory(sx,sy,kingdomIdx){
+  const startIdx = sy*GRID_W+sx;
+  if(S.elevation[startIdx] < S.settings.seaLevel) { toast("Escolha um ponto em terra firme."); return; }
+  const targetOwner = S.political[startIdx];
+  if(!S.settings.overwritePolitical && targetOwner>=0 && targetOwner!==kingdomIdx){ toast("Território já pertence a outro reino. Ative 'sobrescrever' para tomar."); return; }
+  const stack=[[sx,sy]]; const seen = new Uint8Array(GRID_W*GRID_H);
+  let count=0;
+  while(stack.length){
+    const [x,y]=stack.pop();
+    const idx=y*GRID_W+x;
+    if(seen[idx]) continue; seen[idx]=1;
+    if(S.elevation[idx] < S.settings.seaLevel) continue;
+    if(S.settings.respectRivers && S.riverCell[idx] && !(x===sx&&y===sy)) continue;
+    if(S.settings.respectMountains && S.elevation[idx] > 0.82) continue;
+    const owner = S.political[idx];
+    if(owner>=0 && owner!==kingdomIdx && !S.settings.overwritePolitical) continue;
+    S.political[idx]=kingdomIdx; count++;
+    if(count>26000) break;
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1]]){
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||nx>=GRID_W||ny<0||ny>=GRID_H) continue;
+      if(!seen[ny*GRID_W+nx]) stack.push([nx,ny]);
+    }
+  }
+  pushHistory("Preencher território");
+  scheduleRenderAll();
+}
+
+/* ---------------------------------------------------------------------------------------
+   8. ROTAS COMERCIAIS — DIJKSTRA
+--------------------------------------------------------------------------------------- */
+function findRoute(sx,sy,tx,ty,type){
+  const N = GRID_W*GRID_H;
+  const dist = new Float32Array(N).fill(Infinity);
+  const prev = new Int32Array(N).fill(-1);
+  const visited = new Uint8Array(N);
+  const startIdx = sy*GRID_W+sx, endIdx = ty*GRID_W+tx;
+  dist[startIdx]=0;
+  // heap simples via array ordenado (grade pequena o suficiente)
+  const heap = [[0,startIdx]];
+  function costOf(idx){
+    const isOcean = S.elevation[idx] < S.settings.seaLevel;
+    if(type==="maritima"){ return isOcean ? 1 : Infinity; }
+    if(isOcean) return Infinity;
+    const e = S.elevation[idx];
+    return 1 + Math.max(0,e-S.settings.seaLevel)*9 + (S.riverCell[idx]?1.4:0);
+  }
+  let iter=0;
+  while(heap.length && iter++<N*2){
+    heap.sort((a,b)=>a[0]-b[0]);
+    const [d, idx] = heap.shift();
+    if(visited[idx]) continue; visited[idx]=1;
+    if(idx===endIdx) break;
+    const x=idx%GRID_W, y=Math.floor(idx/GRID_W);
+    for(const [dx,dy] of [[1,0],[-1,0],[0,1],[0,-1],[1,1],[-1,-1],[1,-1],[-1,1]]){
+      const nx=x+dx, ny=y+dy;
+      if(nx<0||nx>=GRID_W||ny<0||ny>=GRID_H) continue;
+      const nIdx=ny*GRID_W+nx;
+      if(visited[nIdx]) continue;
+      const c = costOf(nIdx);
+      if(!isFinite(c)) continue;
+      const nd = d + c*(dx&&dy?1.41:1);
+      if(nd<dist[nIdx]){ dist[nIdx]=nd; prev[nIdx]=idx; heap.push([nd,nIdx]); }
+    }
+  }
+  if(!isFinite(dist[endIdx])){ toast("Nenhum caminho possível encontrado."); return null; }
+  const path=[]; let cur=endIdx;
+  while(cur!==-1){ path.unshift([cur%GRID_W, Math.floor(cur/GRID_W)]); cur=prev[cur]; }
+  return path;
+}
+
+/* ---------------------------------------------------------------------------------------
+   9. PINCÉIS
+--------------------------------------------------------------------------------------- */
+function brushFalloff(dx,dy,r){ const d=Math.sqrt(dx*dx+dy*dy)/r; if(d>1) return 0; return 0.5+0.5*Math.cos(d*Math.PI); }
+function paintElevation(gx,gy,mode){
+  const r = activeSub.brushSize, str = activeSub.brushStrength;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const x=gx+dx,y=gy+dy;
+    if(x<0||x>=GRID_W||y<0||y>=GRID_H) continue;
+    const f = brushFalloff(dx,dy,r); if(f<=0) continue;
+    const idx=y*GRID_W+x;
+    if(mode==="raise") S.elevation[idx]=Math.min(1,S.elevation[idx]+str*f);
+    else if(mode==="lower") S.elevation[idx]=Math.max(0,S.elevation[idx]-str*f);
+    else if(mode==="flatten") S.elevation[idx]=lerp(S.elevation[idx], elevAt(gx,gy), 0.35*f);
+    else if(mode==="smooth"){
+      let sum=0,c=0;
+      for(let ny=-1;ny<=1;ny++)for(let nx=-1;nx<=1;nx++){
+        const sx=x+nx, sy=y+ny; if(sx<0||sx>=GRID_W||sy<0||sy>=GRID_H) continue;
+        sum+=S.elevation[sy*GRID_W+sx]; c++;
+      }
+      S.elevation[idx]=lerp(S.elevation[idx], sum/c, 0.4*f);
+    }
+  }
+}
+function paintMoisture(gx,gy,mode){
+  const r=activeSub.brushSize, str=activeSub.brushStrength*1.4;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const x=gx+dx,y=gy+dy; if(x<0||x>=GRID_W||y<0||y>=GRID_H) continue;
+    const f=brushFalloff(dx,dy,r); if(f<=0) continue;
+    const idx=y*GRID_W+x;
+    if(mode==="raise") S.moisture[idx]=Math.min(1,S.moisture[idx]+str*f);
+    else S.moisture[idx]=Math.max(0,S.moisture[idx]-str*f);
+  }
+}
+function paintBiome(gx,gy){
+  const r=activeSub.brushSize;
+  for(let dy=-r;dy<=r;dy++)for(let dx=-r;dx<=r;dx++){
+    const x=gx+dx,y=gy+dy; if(x<0||x>=GRID_W||y<0||y>=GRID_H) continue;
+    const f=brushFalloff(dx,dy,r); if(f<=0) continue;
+    if(f<0.35 && Math.random()>f*2) continue;
+    S.biomeOverride[y*GRID_W+x]=activeSub.biomePaint;
+  }
+}
+
+/* ---------------------------------------------------------------------------------------
+   10. RENDERIZAÇÃO
+--------------------------------------------------------------------------------------- */
+const offTerrain = document.createElement("canvas"); offTerrain.width=GRID_W; offTerrain.height=GRID_H;
+const offTerrainCtx = offTerrain.getContext("2d");
+const offPolitical = document.createElement("canvas"); offPolitical.width=GRID_W; offPolitical.height=GRID_H;
+const offPoliticalCtx = offPolitical.getContext("2d", {willReadFrequently:false});
+
+const terrainCanvas = document.getElementById("terrainCanvas");
+const politicalCanvas = document.getElementById("politicalCanvas");
+const riversRoutesCanvas = document.getElementById("riversRoutesCanvas");
+const gridCanvas = document.getElementById("gridCanvas");
+const assetsLabelsCanvas = document.getElementById("assetsLabelsCanvas");
+const interactionCanvas = document.getElementById("interactionCanvas");
+[terrainCanvas,politicalCanvas,riversRoutesCanvas,gridCanvas,assetsLabelsCanvas,interactionCanvas].forEach(c=>{ c.width=CW; c.height=CH; });
+document.getElementById("viewport").style.width=CW+"px";
+document.getElementById("viewport").style.height=CH+"px";
+
+let terrainTexture = null; // ruído de papel gerado 1x
+function buildParchmentTexture(){
+  const c = document.createElement("canvas"); c.width=256; c.height=256;
+  const ctx=c.getContext("2d");
+  const img = ctx.createImageData(256,256);
+  const perm = buildPermutation(1234);
+  for(let y=0;y<256;y++)for(let x=0;x<256;x++){
+    const n = fbm(perm,x/18,y/18,3,0.55,2.1);
+    const v = 128 + (n-0.5)*40;
+    const i=(y*256+x)*4;
+    img.data[i]=v; img.data[i+1]=v; img.data[i+2]=v; img.data[i+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  terrainTexture = c;
+}
+buildParchmentTexture();
+
+function renderTerrainOffscreen(){
+  const img = offTerrainCtx.createImageData(GRID_W,GRID_H);
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      const idx=y*GRID_W+x;
+      const bId = classifyBiome(idx,x,y);
+      const col = BIOMES[bId].color;
+      const p=(y*GRID_W+x)*4;
+      img.data[p]=col[0]; img.data[p+1]=col[1]; img.data[p+2]=col[2]; img.data[p+3]=255;
+    }
+  }
+  offTerrainCtx.putImageData(img,0,0);
+}
+function renderPoliticalOffscreen(){
+  offPoliticalCtx.clearRect(0,0,GRID_W,GRID_H);
+  const img = offPoliticalCtx.createImageData(GRID_W,GRID_H);
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      const idx=y*GRID_W+x; const owner=S.political[idx];
+      const p=idx*4;
+      if(owner<0 || !S.kingdoms[owner]){ img.data[p+3]=0; continue; }
+      const col = hexToRgb(S.kingdoms[owner].color);
+      img.data[p]=col.r; img.data[p+1]=col.g; img.data[p+2]=col.b; img.data[p+3]=95;
+    }
+  }
+  offPoliticalCtx.putImageData(img,0,0);
+}
+function hexToRgb(hex){ const v=parseInt(hex.replace("#",""),16); return {r:(v>>16)&255,g:(v>>8)&255,b:v&255}; }
+
+function drawLayerFromOffscreen(canvas, off, smoothing){
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0,0,CW,CH);
+  ctx.imageSmoothingEnabled = smoothing;
+  ctx.drawImage(off,0,0,CW,CH);
+}
+function drawParchmentOverlay(ctx){
+  ctx.save();
+  ctx.globalAlpha=0.06;
+  ctx.globalCompositeOperation="overlay";
+  const pattern = ctx.createPattern(terrainTexture,"repeat");
+  ctx.fillStyle=pattern;
+  ctx.fillRect(0,0,CW,CH);
+  ctx.restore();
+}
+
+function drawPoliticalBorders(ctx){
+  ctx.save();
+  ctx.lineWidth=2.1; ctx.lineCap="round"; ctx.lineJoin="round";
+  for(let y=0;y<GRID_H;y++){
+    for(let x=0;x<GRID_W;x++){
+      const idx=y*GRID_W+x; const owner=S.political[idx];
+      if(owner<0) continue;
+      const kc = S.kingdoms[owner]? S.kingdoms[owner].color : "#c9a24b";
+      // direita
+      if(x<GRID_W-1){
+        const ro=S.political[idx+1];
+        if(ro!==owner){ ctx.strokeStyle=kc; ctx.beginPath(); ctx.moveTo((x+1)*CELL,y*CELL); ctx.lineTo((x+1)*CELL,(y+1)*CELL); ctx.stroke(); }
+      }
+      if(y<GRID_H-1){
+        const bo=S.political[idx+GRID_W];
+        if(bo!==owner){ ctx.strokeStyle=kc; ctx.beginPath(); ctx.moveTo(x*CELL,(y+1)*CELL); ctx.lineTo((x+1)*CELL,(y+1)*CELL); ctx.stroke(); }
+      }
+    }
+  }
+  ctx.restore();
+}
+
+function smoothPath(ctx, pts, close){
+  if(pts.length<2) return;
+  ctx.beginPath();
+  ctx.moveTo(pts[0][0],pts[0][1]);
+  for(let i=1;i<pts.length-1;i++){
+    const xc=(pts[i][0]+pts[i+1][0])/2, yc=(pts[i][1]+pts[i+1][1])/2;
+    ctx.quadraticCurveTo(pts[i][0],pts[i][1],xc,yc);
+  }
+  const last=pts[pts.length-1];
+  ctx.lineTo(last[0],last[1]);
+}
+function drawRiversRoutes(){
+  const ctx = riversRoutesCanvas.getContext("2d");
+  ctx.clearRect(0,0,CW,CH);
+  // rios
+  ctx.strokeStyle = layerVisible.terrain? "#2e6f8e" : "#2e6f8e";
+  ctx.lineCap="round"; ctx.lineJoin="round";
+  for(const r of S.rivers){
+    const pts = r.points.map(p=>[p[0]*CELL+CELL/2,p[1]*CELL+CELL/2]);
+    ctx.lineWidth = Math.min(9, 1.6 + pts.length*0.045);
+    ctx.strokeStyle="#4a8fb0";
+    smoothPath(ctx,pts); ctx.stroke();
+    ctx.lineWidth = Math.max(0.8, ctx.lineWidth-1.6); ctx.strokeStyle="#8fc4dd";
+    smoothPath(ctx,pts); ctx.stroke();
+  }
+  // rotas
+  for(const rt of S.routes){
+    const pts = rt.points.map(p=>[p[0]*CELL+CELL/2,p[1]*CELL+CELL/2]);
+    ctx.setLineDash(rt.type==="maritima" ? [2,5] : [9,5]);
+    ctx.lineWidth = rt.type==="maritima" ? 1.6 : 2.2;
+    ctx.strokeStyle = rt.type==="maritima" ? "#bcd6de" : "#caa25a";
+    smoothPath(ctx,pts); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+  // fronteiras políticas (na mesma camada para simplificar toggles em conjunto)
+  if(layerVisible.political) drawPoliticalBorders(ctx);
+  // caminho em progresso (rio manual / rota / label curvo)
+  if(curPathPoints.length){
+    const pts = curPathPoints.map(p=>[p[0]*CELL+CELL/2,p[1]*CELL+CELL/2]);
+    ctx.setLineDash([4,4]); ctx.strokeStyle="#e0be74"; ctx.lineWidth=1.4;
+    ctx.beginPath(); pts.forEach((p,i)=> i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]));
+    ctx.stroke(); ctx.setLineDash([]);
+    pts.forEach(p=>{ ctx.beginPath(); ctx.arc(p[0],p[1],3,0,7); ctx.fillStyle="#e0be74"; ctx.fill(); });
+  }
+}
+
+function drawGrid(){
+  const ctx = gridCanvas.getContext("2d");
+  ctx.clearRect(0,0,CW,CH);
+  if(S.settings.gridType==="none") return;
+  ctx.save();
+  ctx.globalAlpha = S.settings.gridOpacity;
+  ctx.strokeStyle = "#e9dcbe";
+  ctx.lineWidth=1;
+  const sp = S.settings.gridSpacing*CELL;
+  if(S.settings.gridType==="square"){
+    for(let x=0;x<=CW;x+=sp){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CH); ctx.stroke(); }
+    for(let y=0;y<=CH;y+=sp){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CW,y); ctx.stroke(); }
+  } else if(S.settings.gridType==="hex"){
+    const size = sp/1.8;
+    const w = Math.sqrt(3)*size, h = size*2;
+    let row=0;
+    for(let y=-h; y<CH+h; y+=h*0.75){
+      const offset = (row%2)*w/2;
+      for(let x=-w+offset; x<CW+w; x+=w){
+        drawHex(ctx,x,y,size);
+      }
+      row++;
+    }
+  } else if(S.settings.gridType==="latlong"){
+    ctx.fillStyle="#e9dcbe"; ctx.font="10px Inter";
+    const latSp = Math.max(20,sp);
+    let latNum=0;
+    for(let y=S.settings.equatorRow*CELL; y>=0; y-=latSp){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CW,y); ctx.stroke(); if(y<CH) ctx.fillText((latNum*5)+"°N", 4, y-3); latNum++; }
+    latNum=0;
+    for(let y=S.settings.equatorRow*CELL; y<=CH; y+=latSp){ ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(CW,y); ctx.stroke(); if(y>0) ctx.fillText((latNum*5)+"°S", 4, y-3); latNum++; }
+    let lonNum=0;
+    for(let x=0; x<=CW; x+=latSp){ ctx.beginPath(); ctx.moveTo(x,0); ctx.lineTo(x,CH); ctx.stroke(); ctx.fillText((lonNum*5)+"°", x+3, 12); lonNum++; }
+  }
+  ctx.restore();
+}
+function drawHex(ctx,cx,cy,size){
+  ctx.beginPath();
+  for(let i=0;i<6;i++){
+    const ang = Math.PI/180*(60*i-30);
+    const px=cx+size*Math.cos(ang), py=cy+size*Math.sin(ang);
+    i?ctx.lineTo(px,py):ctx.moveTo(px,py);
+  }
+  ctx.closePath(); ctx.stroke();
+}
+
+function assetIconPath(type){ return ASSET_ICON_DRAW[type] || ASSET_ICON_DRAW.cidade; }
+const ASSET_ICON_DRAW = {
+  montanha:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(0,-14*s); ctx.lineTo(11*s,10*s); ctx.lineTo(-11*s,10*s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#fff"; ctx.beginPath(); ctx.moveTo(0,-14*s); ctx.lineTo(4*s,-5*s); ctx.lineTo(-4*s,-5*s); ctx.closePath(); ctx.fill(); },
+  vulcao:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(0,-14*s); ctx.lineTo(11*s,10*s); ctx.lineTo(-11*s,10*s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#c1502f"; ctx.beginPath(); ctx.arc(0,-14*s,2.6*s,0,7); ctx.fill(); ctx.fillStyle="#e0603a"; ctx.beginPath(); ctx.ellipse(1*s,-17*s,3*s,5*s,0.3,0,7); ctx.fill(); },
+  arvore:(ctx,s,color)=>{ ctx.fillStyle=color; for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(-6*s+i*6*s, -6*s+((i%2)*3*s), 6*s,0,7); ctx.fill(); } ctx.fillStyle="#5b4327"; ctx.fillRect(-1.5*s,4*s,3*s,7*s); },
+  palmeira:(ctx,s,color)=>{ ctx.strokeStyle="#7a5a30"; ctx.lineWidth=2*s; ctx.beginPath(); ctx.moveTo(0,12*s); ctx.quadraticCurveTo(3*s,0,0,-8*s); ctx.stroke();
+    ctx.fillStyle=color; for(let i=0;i<5;i++){ const a=(i/5)*Math.PI*2; ctx.beginPath(); ctx.ellipse(0,-8*s,7*s,2.4*s,a,0,7); ctx.fill(); } },
+  vila:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(-6*s,3*s); ctx.lineTo(0,-6*s); ctx.lineTo(6*s,3*s); ctx.closePath(); ctx.fill(); ctx.fillStyle="#3a2f1c"; ctx.fillRect(-4*s,3*s,8*s,5*s); },
+  cidade:(ctx,s,color)=>{ ctx.fillStyle=color; for(let i=-1;i<=1;i++){ ctx.fillRect(i*7*s-2.5*s, -2*s-((i===0)?5*s:0), 5*s, 10*s+((i===0)?5*s:0)); } },
+  castelo:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.fillRect(-10*s,-2*s,20*s,12*s);
+    for(let i=-1;i<=1;i++){ ctx.fillRect(i*8*s-2.5*s,-10*s,5*s,8*s); }
+    ctx.fillStyle="#7a5a30"; ctx.beginPath(); ctx.moveTo(-2.5*s,-2*s); ctx.lineTo(0,-8*s); ctx.lineTo(2.5*s,-2*s); ctx.fill(); },
+  porto:(ctx,s,color)=>{ ctx.strokeStyle=color; ctx.lineWidth=2*s; ctx.beginPath(); ctx.arc(0,2*s,7*s,0.2*Math.PI,0.8*Math.PI); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0,-9*s); ctx.lineTo(0,4*s); ctx.moveTo(-4*s,-6*s); ctx.lineTo(4*s,-6*s); ctx.stroke(); },
+  ruina:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.fillRect(-8*s,2*s,4*s,8*s); ctx.fillRect(1*s,-4*s,4*s,14*s); ctx.fillRect(-2*s,6*s,10*s,3*s); },
+  torre:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(-4*s,10*s); ctx.lineTo(-3*s,-8*s); ctx.lineTo(0,-14*s); ctx.lineTo(3*s,-8*s); ctx.lineTo(4*s,10*s); ctx.closePath(); ctx.fill();
+    ctx.fillStyle="#8fc4dd"; ctx.beginPath(); ctx.arc(0,-4*s,2*s,0,7); ctx.fill(); },
+  monstro:(ctx,s,color)=>{ ctx.strokeStyle=color; ctx.lineWidth=3*s; ctx.lineCap="round"; ctx.beginPath();
+    ctx.moveTo(-10*s,4*s); ctx.quadraticCurveTo(-4*s,-8*s,0,0); ctx.quadraticCurveTo(4*s,8*s,10*s,-4*s); ctx.stroke();
+    ctx.fillStyle=color; ctx.beginPath(); ctx.arc(10*s,-6*s,2.6*s,0,7); ctx.fill(); },
+  dragao:(ctx,s,color)=>{ ctx.fillStyle=color; ctx.beginPath(); ctx.moveTo(-9*s,6*s); ctx.quadraticCurveTo(0,-14*s,9*s,6*s); ctx.quadraticCurveTo(0,-2*s,-9*s,6*s); ctx.fill();
+    ctx.fillStyle="#c1502f"; ctx.beginPath(); ctx.moveTo(-2*s,-6*s); ctx.lineTo(0,-13*s); ctx.lineTo(2*s,-6*s); ctx.fill(); }
+};
+function drawAssetsLabels(){
+  const ctx = assetsLabelsCanvas.getContext("2d");
+  ctx.clearRect(0,0,CW,CH);
+  if(layerVisible.assets){
+    for(const a of S.assets){
+      const px=a.gx*CELL, py=a.gy*CELL;
+      ctx.save(); ctx.translate(px,py); ctx.rotate((a.rot||0)*Math.PI/180); ctx.scale(a.scale||1,a.scale||1);
+      if(a.customId && S.customAssets[a.customId] && S.customAssets[a.customId]._img){
+        const img=S.customAssets[a.customId]._img; const w=28,h=28;
+        ctx.drawImage(img,-w/2,-h/2,w,h);
+      } else {
+        (ASSET_ICON_DRAW[a.type]||ASSET_ICON_DRAW.cidade)(ctx,1.15,a.color||"#c9a24b");
+      }
+      ctx.restore();
+      if(selection && selection.type==="asset" && selection.id===a.id){ ctx.strokeStyle="#e0be74"; ctx.lineWidth=1.4; ctx.setLineDash([3,3]); ctx.strokeRect(px-16,py-16,32,32); ctx.setLineDash([]); }
+    }
+  }
+  if(layerVisible.labels){
+    for(const l of S.labels){
+      ctx.save();
+      ctx.fillStyle=l.color; ctx.font=(l.italic?"italic ":"")+"600 "+l.size+"px "+fontFamilyFor(l.font);
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      if(l.mode==="curvo" && l.points.length>=2){
+        drawCurvedText(ctx,l);
+      } else {
+        const p=l.points[0];
+        ctx.translate(p[0]*CELL,p[1]*CELL); ctx.rotate((l.rotation||0)*Math.PI/180);
+        ctx.fillText(l.text,0,0);
+      }
+      ctx.restore();
+      if(selection && selection.type==="label" && selection.id===l.id){
+        const p=l.points[0];
+        ctx.strokeStyle="#e0be74"; ctx.lineWidth=1; ctx.setLineDash([3,3]);
+        ctx.strokeRect(p[0]*CELL-40,p[1]*CELL-14,80,28); ctx.setLineDash([]);
+      }
+    }
+  }
+}
+function fontFamilyFor(f){ return {Cinzel:"'Cinzel',serif", Spectral:"'Spectral',serif", Inter:"'Inter',sans-serif"}[f] || "'Cinzel',serif"; }
+function drawCurvedText(ctx,l){
+  const pts = l.points.map(p=>[p[0]*CELL,p[1]*CELL]);
+  let total=0; const segs=[];
+  for(let i=0;i<pts.length-1;i++){ const d=Math.hypot(pts[i+1][0]-pts[i][0],pts[i+1][1]-pts[i][1]); segs.push(d); total+=d; }
+  const text=l.text; const chars=text.split("");
+  let charsWidth=0; ctx.save(); ctx.font=(l.italic?"italic ":"")+"600 "+l.size+"px "+fontFamilyFor(l.font);
+  const widths = chars.map(c=>ctx.measureText(c).width);
+  charsWidth = widths.reduce((a,b)=>a+b,0);
+  let dist = (total-charsWidth)/2;
+  function posAt(d){
+    let acc=0;
+    for(let i=0;i<segs.length;i++){
+      if(acc+segs[i]>=d){
+        const t=(d-acc)/segs[i];
+        const x=lerp(pts[i][0],pts[i+1][0],t), y=lerp(pts[i][1],pts[i+1][1],t);
+        const ang=Math.atan2(pts[i+1][1]-pts[i][1],pts[i+1][0]-pts[i][0]);
+        return {x,y,ang};
+      }
+      acc+=segs[i];
+    }
+    const last=pts[pts.length-1]; return {x:last[0],y:last[1],ang:0};
+  }
+  for(let i=0;i<chars.length;i++){
+    const p = posAt(dist + widths[i]/2);
+    ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.ang); ctx.fillText(chars[i],0,0); ctx.restore();
+    dist+=widths[i];
+  }
+  ctx.restore();
+}
+
+let layerVisible = { terrain:true, political:true, rivers:true, routes:true, grid:true, assets:true, labels:true };
+let rafScheduled = false, rafVectorScheduled=false;
+function scheduleRenderAll(){
+  if(rafScheduled) return; rafScheduled=true;
+  requestAnimationFrame(()=>{
+    rafScheduled=false;
+    renderTerrainOffscreen();
+    renderPoliticalOffscreen();
+    drawLayerFromOffscreen(terrainCanvas, offTerrain, true);
+    drawParchmentOverlay(terrainCanvas.getContext("2d"));
+    drawLayerFromOffscreen(politicalCanvas, offPolitical, false);
+    drawRiversRoutes(); drawGrid(); drawAssetsLabels();
+    updateScaleBar();
+  });
+}
+function scheduleRenderVector(){
+  if(rafVectorScheduled) return; rafVectorScheduled=true;
+  requestAnimationFrame(()=>{ rafVectorScheduled=false; drawRiversRoutes(); drawAssetsLabels(); drawGrid(); });
+}
+function applyLayerVisibility(){
+  terrainCanvas.style.display = layerVisible.terrain?"block":"none";
+  politicalCanvas.style.display = layerVisible.political?"block":"none";
+  riversRoutesCanvas.style.display = (layerVisible.rivers||layerVisible.routes||layerVisible.political)?"block":"none";
+  gridCanvas.style.display = layerVisible.grid?"block":"none";
+  assetsLabelsCanvas.style.display = (layerVisible.assets||layerVisible.labels)?"block":"none";
+}
+
+/* ---------------------------------------------------------------------------------------
+   11. VIEW / PAN / ZOOM
+--------------------------------------------------------------------------------------- */
+const viewportScroll = document.getElementById("viewport-scroll");
+const viewportEl = document.getElementById("viewport");
+function applyView(){
+  viewportEl.style.transform = `scale(${view.zoom})`;
+  document.getElementById("zoom-pct").textContent = Math.round(view.zoom*100)+"%";
+}
+function centerView(){
+  viewportScroll.scrollLeft = (CW*view.zoom - viewportScroll.clientWidth)/2;
+  viewportScroll.scrollTop = (CH*view.zoom - viewportScroll.clientHeight)/2;
+}
+document.getElementById("zoom-in").onclick=()=>{ view.zoom=Math.min(4,view.zoom*1.25); applyView(); };
+document.getElementById("zoom-out").onclick=()=>{ view.zoom=Math.max(0.15,view.zoom/1.25); applyView(); };
+document.getElementById("compass").onclick=centerView;
+document.getElementById("viewport-wrap").addEventListener("wheel",(e)=>{
+  if(!e.ctrlKey && !e.metaKey) return;
+  e.preventDefault();
+  const dir = e.deltaY<0?1.1:0.9;
+  view.zoom = Math.max(0.15,Math.min(4, view.zoom*dir));
+  applyView();
+},{passive:false});
+
+function niceNumber(x){
+  const exp = Math.floor(Math.log10(x));
+  const f = x/Math.pow(10,exp);
+  let nf; if(f<1.5) nf=1; else if(f<3.5) nf=2; else if(f<7.5) nf=5; else nf=10;
+  return nf*Math.pow(10,exp);
+}
+function updateScaleBar(){
+  const targetPx = 90;
+  const unitPerPx = S.settings.kmPerCell/(CELL*view.zoom);
+  const rawUnits = targetPx*unitPerPx;
+  const nice = niceNumber(rawUnits);
+  const px = nice/unitPerPx;
+  let label = nice+" km";
+  if(S.settings.scaleUnit==="mi") label = Math.round(nice*0.621)+" mi";
+  if(S.settings.scaleUnit==="dias") label = Math.max(1,Math.round(nice/40))+" dias a cavalo";
+  document.getElementById("scalebar-bar").style.width = px+"px";
+  document.getElementById("scalebar-label").textContent = label;
+  document.getElementById("bb-scale").textContent = "1 célula = "+S.settings.kmPerCell+" km";
+}
+
+/* ---------------------------------------------------------------------------------------
+   12. INTERAÇÃO DO MOUSE / TOQUE NO CANVAS
+--------------------------------------------------------------------------------------- */
+const brushCursor = document.getElementById("brush-cursor");
+function screenToGrid(e){
+  const rect = interactionCanvas.getBoundingClientRect();
+  const px = (e.clientX-rect.left)/view.zoom;
+  const py = (e.clientY-rect.top)/view.zoom;
+  let gx = Math.floor(px/CELL), gy = Math.floor(py/CELL);
+  if(S.settings.snapGrid && S.settings.gridType!=="none"){
+    const sp=S.settings.gridSpacing;
+    gx = Math.round(gx/sp)*sp; gy = Math.round(gy/sp)*sp;
+  }
+  gx = Math.max(0,Math.min(GRID_W-1,gx)); gy = Math.max(0,Math.min(GRID_H-1,gy));
+  return {gx,gy,px,py};
+}
+function updateReadout(gx,gy){
+  const idx=gy*GRID_W+gx;
+  const alt = Math.round((S.elevation[idx]-S.settings.seaLevel)*8000);
+  document.getElementById("coord-readout").innerHTML = `X: ${gx} &nbsp; Y: ${gy}<br>Alt: ${alt>=0?"+":""}${alt} m`;
+}
+
+let spaceHeld=false;
+window.addEventListener("keydown",e=>{
+  if(e.code==="Space"){ spaceHeld=true; document.getElementById("viewport-wrap").classList.add("panning"); }
+  if((e.ctrlKey||e.metaKey) && e.key==="z"){ e.preventDefault(); undo(); }
+  if((e.ctrlKey||e.metaKey) && (e.key==="y"|| (e.shiftKey&&e.key==="Z"))){ e.preventDefault(); redo(); }
+  if(e.key==="Escape"){ curPathPoints=[]; selection=null; scheduleRenderVector(); closeContextPanel(); }
+  if(e.key==="Enter" && curPathPoints.length){ finishPathTool(); }
+});
+window.addEventListener("keyup",e=>{ if(e.code==="Space"){ spaceHeld=false; document.getElementById("viewport-wrap").classList.remove("panning"); } });
+
+let panStart=null;
+interactionCanvas.addEventListener("pointerdown",(e)=>{
+  if(spaceHeld || activeTool==="pan"){
+    panStart={x:e.clientX,y:e.clientY,sl:viewportScroll.scrollLeft,st:viewportScroll.scrollTop};
+    document.getElementById("viewport-wrap").classList.add("panning-active");
+    return;
+  }
+  isPointerDown=true;
+  interactionCanvas.setPointerCapture(e.pointerId);
+  handleToolDown(e);
+});
+interactionCanvas.addEventListener("pointermove",(e)=>{
+  const {gx,gy,px,py} = screenToGrid(e);
+  updateReadout(gx,gy);
+  if(["elev","moist","biome"].includes(activeTool)){
+    brushCursor.style.display="block";
+    brushCursor.style.left = px*view.zoom+"px"; brushCursor.style.top=py*view.zoom+"px";
+    const dpx = activeSub.brushSize*CELL*2*view.zoom;
+    brushCursor.style.width=dpx+"px"; brushCursor.style.height=dpx+"px";
+  } else brushCursor.style.display="none";
+
+  if(panStart){
+    viewportScroll.scrollLeft = panStart.sl - (e.clientX-panStart.x);
+    viewportScroll.scrollTop = panStart.st - (e.clientY-panStart.y);
+    return;
+  }
+  if(isPointerDown) handleToolDrag(e);
+});
+window.addEventListener("pointerup",(e)=>{
+  if(panStart){ panStart=null; document.getElementById("viewport-wrap").classList.remove("panning-active"); }
+  if(isPointerDown){ isPointerDown=false; handleToolUp(e); }
+});
+interactionCanvas.addEventListener("click",(e)=>{ if(!spaceHeld) handleToolClick(e); });
+interactionCanvas.addEventListener("dblclick",(e)=>{ if(curPathPoints.length) finishPathTool(); });
+
+function handleToolDown(e){
+  const {gx,gy} = screenToGrid(e);
+  if(activeTool==="elev"){ paintElevation(gx,gy,activeSub.elevMode); scheduleRenderAll(); }
+  else if(activeTool==="moist"){ paintMoisture(gx,gy,activeSub.moistMode); scheduleRenderAll(); }
+  else if(activeTool==="biome"){ paintBiome(gx,gy); scheduleRenderAll(); }
+}
+function handleToolDrag(e){
+  const {gx,gy} = screenToGrid(e);
+  if(activeTool==="elev"){ paintElevation(gx,gy,activeSub.elevMode); scheduleRenderAll(); }
+  else if(activeTool==="moist"){ paintMoisture(gx,gy,activeSub.moistMode); scheduleRenderAll(); }
+  else if(activeTool==="biome"){ paintBiome(gx,gy); scheduleRenderAll(); }
+}
+function handleToolUp(e){
+  if(["elev","moist","biome"].includes(activeTool)) pushHistory("Pincel: "+activeTool);
+}
+function handleToolClick(e){
+  const {gx,gy} = screenToGrid(e);
+  if(activeTool==="rio"){
+    if(activeSub.riverMode==="auto"){
+      const path = traceRiverFrom(gx,gy);
+      if(path) { addRiver(path); pushHistory("Traçar rio"); scheduleRenderAll(); toast("Rio traçado até o mar (ou fim do percurso)."); }
+      else toast("Não foi possível traçar um rio a partir daqui.");
+    } else {
+      curPathPoints.push([gx,gy]);
+      scheduleRenderVector();
+    }
+  } else if(activeTool==="politica"){
+    if(activeSub.kingdomActive===null){ toast("Crie ou selecione um reino na aba Reinos primeiro."); return; }
+    floodFillTerritory(gx,gy,activeSub.kingdomActive);
+  } else if(activeTool==="rota"){
+    curPathPoints.push([gx,gy]);
+    if(curPathPoints.length===2){
+      const path = findRoute(curPathPoints[0][0],curPathPoints[0][1],curPathPoints[1][0],curPathPoints[1][1],activeSub.routeType);
+      if(path){ S.routes.push({id:S.nextId++, type:activeSub.routeType, points:path}); pushHistory("Nova rota"); }
+      curPathPoints=[]; scheduleRenderAll();
+    } else scheduleRenderVector();
+  } else if(activeTool==="ativo"){
+    S.assets.push({id:S.nextId++, type:activeSub.assetType, gx,gy, scale:activeSub.assetScale, rot:0, color:activeSub.assetColor, customId:activeSub.customAssetId||null});
+    pushHistory("Adicionar ativo"); scheduleRenderVector();
+  } else if(activeTool==="texto"){
+    if(activeSub.labelMode==="reto"){
+      S.labels.push({id:S.nextId++, text:activeSub.labelText||"Rótulo", mode:"reto", points:[[gx,gy]], size:activeSub.labelSize, color:activeSub.labelColor, font:activeSub.labelFont, rotation:0, italic:false});
+      pushHistory("Adicionar rótulo"); scheduleRenderVector();
+    } else {
+      curPathPoints.push([gx,gy]); scheduleRenderVector();
+    }
+  } else if(activeTool==="selecionar"){
+    trySelectAt(gx,gy,e);
+  }
+}
+function finishPathTool(){
+  if(activeTool==="rio" && curPathPoints.length>=2){
+    addRiver(curPathPoints.slice()); pushHistory("Traçar rio manual");
+  } else if(activeTool==="texto" && curPathPoints.length>=2){
+    S.labels.push({id:S.nextId++, text:activeSub.labelText||"Rótulo", mode:"curvo", points:curPathPoints.slice(), size:activeSub.labelSize, color:activeSub.labelColor, font:activeSub.labelFont, rotation:0, italic:false});
+    pushHistory("Adicionar rótulo curvo");
+  }
+  curPathPoints=[]; scheduleRenderAll();
+}
+function trySelectAt(gx,gy,e){
+  let found=null;
+  for(let i=S.assets.length-1;i>=0;i--){ const a=S.assets[i]; if(Math.hypot(a.gx-gx,a.gy-gy)<3){ found={type:"asset",id:a.id}; break; } }
+  if(!found) for(let i=S.labels.length-1;i>=0;i--){ const l=S.labels[i]; const p=l.points[0]; if(Math.hypot(p[0]-gx,p[1]-gy)<5){ found={type:"label",id:l.id}; break; } }
+  selection=found;
+  scheduleRenderVector();
+  openContextPanel(e);
+}
+
+/* ---------------------------------------------------------------------------------------
+   13. PAINEL DE CONTEXTO (seleção)
+--------------------------------------------------------------------------------------- */
+function closeContextPanel(){ const el=document.getElementById("context-panel"); if(el) el.remove(); }
+function openContextPanel(e){
+  closeContextPanel();
+  if(!selection) return;
+  const panel = document.createElement("div");
+  panel.id="context-panel";
+  const rect = document.getElementById("viewport-wrap").getBoundingClientRect();
+  panel.style.left = Math.min(e.clientX-rect.left+10, rect.width-240)+"px";
+  panel.style.top = Math.min(e.clientY-rect.top+10, rect.height-200)+"px";
+  if(selection.type==="asset"){
+    const a = S.assets.find(x=>x.id===selection.id); if(!a) return;
+    panel.innerHTML = `<h5>Ativo: ${a.type}</h5>
+      <div class="row"><label style="flex:1">Escala<input type="range" min="0.4" max="2.5" step="0.05" value="${a.scale}" id="ctx-scale"></label></div>
+      <div class="row"><label style="flex:1">Rotação<input type="range" min="0" max="360" step="5" value="${a.rot}" id="ctx-rot"></label></div>
+      <div class="row"><label>Cor <input type="color" id="ctx-color" value="${a.color}"></label></div>
+      <div class="row" style="margin-top:8px;"><button class="btn danger block" id="ctx-del">Excluir</button></div>`;
+    document.getElementById("viewport-wrap").appendChild(panel);
+    document.getElementById("ctx-scale").oninput=(ev)=>{ a.scale=parseFloat(ev.target.value); scheduleRenderVector(); };
+    document.getElementById("ctx-rot").oninput=(ev)=>{ a.rot=parseFloat(ev.target.value); scheduleRenderVector(); };
+    document.getElementById("ctx-color").oninput=(ev)=>{ a.color=ev.target.value; scheduleRenderVector(); };
+    document.getElementById("ctx-del").onclick=()=>{ S.assets=S.assets.filter(x=>x.id!==a.id); selection=null; closeContextPanel(); pushHistory("Excluir ativo"); scheduleRenderVector(); };
+  } else {
+    const l = S.labels.find(x=>x.id===selection.id); if(!l) return;
+    panel.innerHTML = `<h5>Rótulo</h5>
+      <div class="row"><input type="text" id="ctx-text" value="${l.text.replace(/"/g,'&quot;')}" style="flex:1"></div>
+      <div class="row" style="margin-top:7px;"><label style="flex:1">Tamanho<input type="range" min="9" max="42" value="${l.size}" id="ctx-size"></label></div>
+      ${l.mode==="reto"?`<div class="row"><label style="flex:1">Rotação<input type="range" min="0" max="360" value="${l.rotation}" id="ctx-lrot"></label></div>`:""}
+      <div class="row"><label>Cor <input type="color" id="ctx-lcolor" value="${l.color}"></label>
+      <label style="margin-left:auto;display:flex;align-items:center;gap:4px;font-size:11px;"><input type="checkbox" id="ctx-italic" ${l.italic?"checked":""}> Itálico</label></div>
+      <div class="row" style="margin-top:8px;"><button class="btn danger block" id="ctx-del">Excluir</button></div>`;
+    document.getElementById("viewport-wrap").appendChild(panel);
+    document.getElementById("ctx-text").oninput=(ev)=>{ l.text=ev.target.value; scheduleRenderVector(); };
+    document.getElementById("ctx-size").oninput=(ev)=>{ l.size=parseFloat(ev.target.value); scheduleRenderVector(); };
+    document.getElementById("ctx-lcolor").oninput=(ev)=>{ l.color=ev.target.value; scheduleRenderVector(); };
+    document.getElementById("ctx-italic").onchange=(ev)=>{ l.italic=ev.target.checked; scheduleRenderVector(); };
+    const rotEl=document.getElementById("ctx-lrot"); if(rotEl) rotEl.oninput=(ev)=>{ l.rotation=parseFloat(ev.target.value); scheduleRenderVector(); };
+    document.getElementById("ctx-del").onclick=()=>{ S.labels=S.labels.filter(x=>x.id!==l.id); selection=null; closeContextPanel(); pushHistory("Excluir rótulo"); scheduleRenderVector(); };
+  }
+}
+document.getElementById("viewport-wrap").addEventListener("pointerdown",(e)=>{ if(e.target.id==="interactionCanvas" && activeTool!=="selecionar") closeContextPanel(); });
+
+/* ---------------------------------------------------------------------------------------
+   14. HISTÓRICO (desfazer/refazer) — snapshots leves
+--------------------------------------------------------------------------------------- */
+function snapshotState(){
+  return JSON.stringify(serializeState(S));
+}
+function pushHistory(label){
+  const snap = snapshotState();
+  historyStack = historyStack.slice(0, historyIdx+1);
+  historyStack.push(snap);
+  if(historyStack.length>25) historyStack.shift();
+  historyIdx = historyStack.length-1;
+  scheduleAutosave();
+}
+function undo(){
+  if(historyIdx<=0){ toast("Nada para desfazer."); return; }
+  historyIdx--;
+  S = deserializeState(JSON.parse(historyStack[historyIdx]));
+  scheduleRenderAll(); refreshAllUI();
+}
+function redo(){
+  if(historyIdx>=historyStack.length-1){ toast("Nada para refazer."); return; }
+  historyIdx++;
+  S = deserializeState(JSON.parse(historyStack[historyIdx]));
+  scheduleRenderAll(); refreshAllUI();
+}
+document.getElementById("btn-undo").onclick=undo;
+document.getElementById("btn-redo").onclick=redo;
+
+/* ---------------------------------------------------------------------------------------
+   15. SERIALIZAÇÃO / PERSISTÊNCIA (armazenamento do artefato + arquivos)
+--------------------------------------------------------------------------------------- */
+function serializeState(s){
+  return {
+    version:s.version, seed:s.seed, name:s.name,
+    elevation:Array.from(s.elevation), moisture:Array.from(s.moisture),
+    biomeOverride:Array.from(s.biomeOverride), political:Array.from(s.political),
+    riverCell:Array.from(s.riverCell),
+    kingdoms:s.kingdoms, rivers:s.rivers, routes:s.routes, assets:s.assets, labels:s.labels,
+    customAssets: Object.fromEntries(Object.entries(s.customAssets).map(([k,v])=>[k,{name:v.name,dataURL:v.dataURL,kind:v.kind}])),
+    settings:s.settings, timeline:s.timeline, nextId:s.nextId
+  };
+}
+function deserializeState(o){
+  const ns = freshState();
+  ns.version=o.version||1; ns.seed=o.seed; ns.name=o.name||"Mapa sem título";
+  ns.elevation=Float32Array.from(o.elevation); ns.moisture=Float32Array.from(o.moisture);
+  ns.biomeOverride=Int16Array.from(o.biomeOverride); ns.political=Int16Array.from(o.political);
+  ns.riverCell=Uint8Array.from(o.riverCell||new Uint8Array(GRID_W*GRID_H));
+  ns.kingdoms=o.kingdoms||[]; ns.rivers=o.rivers||[]; ns.routes=o.routes||[]; ns.assets=o.assets||[]; ns.labels=o.labels||[];
+  ns.customAssets = o.customAssets||{};
+  ns.settings=Object.assign(ns.settings,o.settings||{});
+  ns.timeline=o.timeline||[]; ns.nextId=o.nextId||1;
+  hydrateCustomAssetImages(ns);
+  return ns;
+}
+function hydrateCustomAssetImages(s){
+  Object.entries(s.customAssets).forEach(([k,v])=>{
+    if(!v._img){ const img=new Image(); img.onload=()=>scheduleRenderVector(); img.src=v.dataURL; v._img=img; }
+  });
+}
+
+const STORAGE_KEY = "cartographia:autosave";
+function scheduleAutosave(){
+  const dot=document.getElementById("autosave-dot"), txt=document.getElementById("autosave-txt");
+  dot.classList.add("saving"); txt.textContent="salvando no cache…";
+  clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(async ()=>{
+    try{
+      await window.storage.set(STORAGE_KEY, JSON.stringify(serializeState(S)), false);
+      dot.classList.remove("saving"); txt.textContent="cache atualizado";
+    }catch(err){ txt.textContent="cache indisponível"; console.warn(err); }
+  }, 900);
+}
+async function loadFromCache(silent){
+  try{
+    const res = await window.storage.get(STORAGE_KEY, false);
+    if(res && res.value){
+      S = deserializeState(JSON.parse(res.value));
+      scheduleRenderAll(); refreshAllUI();
+      if(!silent) toast("Mapa carregado do cache do navegador.");
+      return true;
+    }
+  }catch(err){ console.warn(err); }
+  if(!silent) toast("Nenhum mapa salvo no cache ainda.");
+  return false;
+}
+async function saveToCache(){
+  try{
+    await window.storage.set(STORAGE_KEY, JSON.stringify(serializeState(S)), false);
+    toast("Mapa salvo no cache do navegador.");
+  }catch(err){ toast("Não foi possível salvar no cache."); }
+}
+
+/* ---------------------------------------------------------------------------------------
+   16. EXPORTAÇÃO
+--------------------------------------------------------------------------------------- */
+function compositeFullCanvas(scale){
+  const out = document.createElement("canvas");
+  out.width=CW*scale; out.height=CH*scale;
+  const ctx = out.getContext("2d");
+  ctx.imageSmoothingEnabled=true;
+  if(layerVisible.terrain) ctx.drawImage(terrainCanvas,0,0,out.width,out.height);
+  if(layerVisible.political) ctx.drawImage(politicalCanvas,0,0,out.width,out.height);
+  ctx.drawImage(riversRoutesCanvas,0,0,out.width,out.height);
+  if(layerVisible.grid) ctx.drawImage(gridCanvas,0,0,out.width,out.height);
+  ctx.drawImage(assetsLabelsCanvas,0,0,out.width,out.height);
+  return out;
+}
+function downloadBlob(blob, filename){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },300);
+}
+function exportPNG(){
+  const out = compositeFullCanvas(2);
+  out.toBlob(blob=>{ downloadBlob(blob, sanitizeFilename(S.name)+".png"); toast("Imagem PNG exportada."); }, "image/png");
+}
+function sanitizeFilename(s){ return (s||"mapa").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-zA-Z0-9-_]+/g,"_").slice(0,60) || "mapa"; }
+
+function exportSVG(){
+  const raster = compositeLayersRaster(); // terreno + politica em PNG base64
+  let svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CW}" height="${CH}" viewBox="0 0 ${CW} ${CH}">\n`;
+  svg += `<image href="${raster}" x="0" y="0" width="${CW}" height="${CH}"/>\n`;
+  // rios
+  S.rivers.forEach(r=>{
+    const d = pointsToSvgPath(r.points);
+    svg += `<path d="${d}" fill="none" stroke="#4a8fb0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>\n`;
+  });
+  // rotas
+  S.routes.forEach(rt=>{
+    const d = pointsToSvgPath(rt.points);
+    const dash = rt.type==="maritima" ? "2,6" : "10,5";
+    const col = rt.type==="maritima" ? "#bcd6de" : "#caa25a";
+    svg += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2" stroke-dasharray="${dash}"/>\n`;
+  });
+  // fronteiras (simplificado: um retângulo por reino via bounding via células — usamos path por linha de borda já computada como imagem; aqui pulamos vetor fino)
+  // ativos como círculos rotulados (representação vetorial simplificada)
+  S.assets.forEach(a=>{
+    svg += `<circle cx="${a.gx*CELL}" cy="${a.gy*CELL}" r="6" fill="${a.color}" stroke="#20180a" stroke-width="1"/>\n`;
+  });
+  // labels
+  let pathIdx=0;
+  S.labels.forEach(l=>{
+    const esc = escapeXml(l.text);
+    if(l.mode==="curvo" && l.points.length>=2){
+      const pid = "labelpath"+(pathIdx++);
+      svg += `<path id="${pid}" d="${pointsToSvgPath(l.points)}" fill="none" stroke="none"/>\n`;
+      svg += `<text font-family="${fontFamilyFor(l.font)}" font-size="${l.size}" fill="${l.color}"><textPath href="#${pid}" startOffset="50%" text-anchor="middle">${esc}</textPath></text>\n`;
+    } else {
+      const p=l.points[0];
+      svg += `<text x="${p[0]*CELL}" y="${p[1]*CELL}" font-family="${fontFamilyFor(l.font)}" font-size="${l.size}" fill="${l.color}" text-anchor="middle" transform="rotate(${l.rotation||0} ${p[0]*CELL} ${p[1]*CELL})">${esc}</text>\n`;
+    }
+  });
+  svg += `</svg>`;
+  const blob = new Blob([svg],{type:"image/svg+xml"});
+  downloadBlob(blob, sanitizeFilename(S.name)+".svg");
+  toast("Vetor SVG exportado (terreno como imagem incorporada + rios/rotas/textos vetoriais).");
+}
+function pointsToSvgPath(points){
+  return points.map((p,i)=> (i===0?"M":"L")+(p[0]*CELL)+","+(p[1]*CELL)).join(" ");
+}
+function escapeXml(s){ return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+function compositeLayersRaster(){
+  const c = document.createElement("canvas"); c.width=CW; c.height=CH;
+  const ctx=c.getContext("2d");
+  if(layerVisible.terrain) ctx.drawImage(terrainCanvas,0,0);
+  if(layerVisible.political) ctx.drawImage(politicalCanvas,0,0);
+  return c.toDataURL("image/png");
+}
+
+async function exportTilesVTT(tileSizePx, colsRows){
+  if(typeof JSZip === "undefined"){ toast("Não foi possível carregar a biblioteca de compactação (sem conexão)."); return; }
+  const full = compositeFullCanvas(1);
+  const cols = colsRows, rows = colsRows;
+  const tw = Math.ceil(full.width/cols), th = Math.ceil(full.height/rows);
+  const zip = new JSZip();
+  const manifest = { grid_cols:cols, grid_rows:rows, tile_width:tw, tile_height:th, km_per_cell:S.settings.kmPerCell, note:"Grade compatível com Roll20/Foundry — alinhe cada tile em sequência de mosaico." };
+  for(let r=0;r<rows;r++){
+    for(let c2=0;c2<cols;c2++){
+      const tc = document.createElement("canvas"); tc.width=tw; tc.height=th;
+      const tctx=tc.getContext("2d");
+      tctx.drawImage(full, c2*tw, r*th, tw, th, 0,0,tw,th);
+      const dataUrl = tc.toDataURL("image/png").split(",")[1];
+      zip.file(`tile_r${r}_c${c2}.png`, dataUrl, {base64:true});
+    }
+  }
+  zip.file("manifest.json", JSON.stringify(manifest,null,2));
+  const blob = await zip.generateAsync({type:"blob"});
+  downloadBlob(blob, sanitizeFilename(S.name)+"_tiles.zip");
+  toast("Tiles exportados em .zip para uso em VTTs (Roll20, Foundry).");
+}
+
+function exportProjectJSON(){
+  const data = { cartographia_project:true, exportedAt:new Date().toISOString(), state:serializeState(S) };
+  const blob = new Blob([JSON.stringify(data)],{type:"application/json"});
+  downloadBlob(blob, sanitizeFilename(S.name)+".json");
+  toast("Projeto exportado como .json.");
+}
+function importProjectJSON(file){
+  const reader = new FileReader();
+  reader.onload = (e)=>{
+    try{
+      const data = JSON.parse(e.target.result);
+      const stateObj = data.state || data;
+      S = deserializeState(stateObj);
+      historyStack=[snapshotState()]; historyIdx=0;
+      scheduleRenderAll(); refreshAllUI();
+      toast("Projeto importado com sucesso.");
+    }catch(err){ toast("Arquivo inválido: "+err.message); }
+  };
+  reader.readAsText(file);
+}
+
+/* ---------------------------------------------------------------------------------------
+   17. UI — CONSTRUÇÃO DOS PAINÉIS LATERAIS
+--------------------------------------------------------------------------------------- */
+const sidebarBody = document.getElementById("sidebar-body");
+let currentTab = "ferramentas";
+
+function icon(name){
+  const I = {
+    raise:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 20l6-12 4 7 3-5 5 10z"/></svg>',
+    lower:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 6l6 12 4-7 3 5 5-10"/></svg>',
+    smooth:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 15c3-6 6-6 9 0s6 6 9 0"/></svg>',
+    flatten:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 17h18M6 17l3-8 3 4 3-6 3 10"/></svg>',
+  };
+  return I[name]||"";
+}
+const TOOL_LIST = [
+  {id:"elev", label:"Elevação", svg:'<path d="M3 19l6-11 4 6 3-4 5 9z"/>'},
+  {id:"moist", label:"Umidade", svg:'<path d="M12 3c3 4 6 7.5 6 11a6 6 0 1 1-12 0c0-3.5 3-7 6-11z"/>'},
+  {id:"biome", label:"Biomas", svg:'<path d="M12 2v20M5 8c3 0 4-2 7-2s4 2 7 2M4 15c3 0 5-2 8-2s5 2 8 2"/>'},
+  {id:"rio", label:"Rios", svg:'<path d="M4 4c4 3 2 6 6 8s2 5 6 8"/><path d="M4 20c4-3 2-6 6-8"/>'},
+  {id:"politica", label:"Política", svg:'<path d="M4 21V9l8-5 8 5v12"/><path d="M9 21v-6h6v6"/>'},
+  {id:"rota", label:"Rotas", svg:'<circle cx="5" cy="12" r="2"/><circle cx="19" cy="12" r="2"/><path d="M7 12h10" stroke-dasharray="3 3"/>'},
+  {id:"ativo", label:"Ativos", svg:'<path d="M12 2l3 6 6 1-4.5 4.5L18 20l-6-3-6 3 1.5-6.5L3 9l6-1z"/>'},
+  {id:"texto", label:"Texto", svg:'<path d="M4 5h16M12 5v14"/>'},
+  {id:"selecionar", label:"Selecionar", svg:'<path d="M4 4l7 16 2-6 6-2z"/>'},
+  {id:"pan", label:"Mover Tela", svg:'<path d="M12 3v18M3 12h18M7 7l-3 5 3 5M17 7l3 5-3 5"/>'},
+];
+
+function setTool(t){
+  activeTool=t; curPathPoints=[]; selection=null; closeContextPanel();
+  document.getElementById("bb-tool").textContent = (TOOL_LIST.find(x=>x.id===t)||{label:t}).label;
+  updateToolHint();
+  scheduleRenderVector();
+  renderSidebar();
+}
+function updateToolHint(){
+  const hints = {
+    elev:"Pincel de Elevação — clique e arraste para esculpir o relevo",
+    moist:"Pincel de Umidade — pinte áreas mais úmidas ou áridas",
+    biome:"Pincel de Bioma — sobrescreve o clima automático (ideal para causas mágicas)",
+    rio:"Rios — clique para traçar automaticamente, ou use modo manual e pressione Enter/duplo-clique para concluir",
+    politica:"Política — clique em um território para preenchê-lo com o reino ativo",
+    rota:"Rotas — clique na origem e depois no destino para calcular o caminho",
+    ativo:"Ativos — clique no mapa para posicionar o ícone selecionado",
+    texto:"Texto — clique para posicionar; no modo curvo, clique vários pontos e pressione Enter",
+    selecionar:"Selecionar — clique em um ativo ou rótulo para editar suas propriedades",
+    pan:"Mover Tela — arraste para navegar pelo mapa (ou segure Espaço com qualquer ferramenta)"
+  };
+  document.getElementById("tool-hint").textContent = hints[activeTool]||"";
+}
+
+function renderSidebar(){
+  if(currentTab==="ferramentas") renderToolsPanel();
+  else if(currentTab==="camadas") renderLayersPanel();
+  else if(currentTab==="reinos") renderKingdomsPanel();
+  else if(currentTab==="tempo") renderTimelinePanel();
+  else if(currentTab==="mapa") renderMapPanel();
+}
+
+function renderToolsPanel(){
+  let html = `<div class="panel-sec"><h4>Ferramenta</h4><div class="tool-grid">`;
+  TOOL_LIST.forEach(t=>{
+    html += `<div class="tool-btn ${activeTool===t.id?'active':''}" data-tool="${t.id}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">${t.svg}</svg>${t.label}</div>`;
+  });
+  html += `</div></div>`;
+
+  if(activeTool==="elev"){
+    html += `<div class="panel-sec"><h4>Escultura de Relevo</h4>
+      <div class="grid2">
+        <div class="btn ${activeSub.elevMode==='raise'?'active':''}" data-set="elevMode" data-val="raise">▲ Elevar</div>
+        <div class="btn ${activeSub.elevMode==='lower'?'active':''}" data-set="elevMode" data-val="lower">▼ Rebaixar</div>
+        <div class="btn ${activeSub.elevMode==='smooth'?'active':''}" data-set="elevMode" data-val="smooth">〰 Suavizar</div>
+        <div class="btn ${activeSub.elevMode==='flatten'?'active':''}" data-set="elevMode" data-val="flatten">▭ Nivelar</div>
+      </div>
+      <div class="field" style="margin-top:10px;"><label>Tamanho do pincel<span class="v">${activeSub.brushSize}</span></label>
+        <input type="range" id="rng-brushsize" min="2" max="35" value="${activeSub.brushSize}"></div>
+      <div class="field"><label>Intensidade<span class="v">${activeSub.brushStrength.toFixed(3)}</span></label>
+        <input type="range" id="rng-brushstrength" min="0.005" max="0.15" step="0.005" value="${activeSub.brushStrength}"></div>
+    </div>
+    <div class="panel-sec"><h4>Hidrologia — Erosão</h4>
+      <div class="field"><label>Iterações<span class="v" id="lbl-erosion-it">6</span></label><input type="range" id="rng-erosion-it" min="1" max="20" value="6"></div>
+      <div class="field"><label>Força<span class="v" id="lbl-erosion-str">0.30</span></label><input type="range" id="rng-erosion-str" min="0.05" max="0.6" step="0.01" value="0.3"></div>
+      <button class="btn block primary" id="btn-run-erosion">💧 Simular erosão hidrológica</button>
+      <div class="help">Simula o desgaste natural do relevo ao longo do tempo, criando vales e encostas mais realistas.</div>
+    </div>`;
+  }
+  if(activeTool==="moist"){
+    html += `<div class="panel-sec"><h4>Umidade</h4>
+      <div class="grid2">
+        <div class="btn ${activeSub.moistMode==='raise'?'active':''}" data-set="moistMode" data-val="raise">☔ Umedecer</div>
+        <div class="btn ${activeSub.moistMode==='lower'?'active':''}" data-set="moistMode" data-val="lower">☀ Secar</div>
+      </div>
+      <div class="field" style="margin-top:10px;"><label>Tamanho do pincel<span class="v">${activeSub.brushSize}</span></label>
+        <input type="range" id="rng-brushsize" min="2" max="35" value="${activeSub.brushSize}"></div>
+    </div>
+    <div class="panel-sec"><h4>Correntes de Vento</h4>
+      <div class="compass-dial"><svg width="70" height="70" viewBox="0 0 100 100">
+        <circle cx="50" cy="50" r="40" fill="none" stroke="#8a6f3a"/>
+        <text x="50" y="18" text-anchor="middle" fill="#c9a24b" font-size="11">N</text>
+        <text x="50" y="90" text-anchor="middle" fill="#c9a24b" font-size="11">S</text>
+        <text x="12" y="54" text-anchor="middle" fill="#c9a24b" font-size="11">L</text>
+        <text x="88" y="54" text-anchor="middle" fill="#c9a24b" font-size="11">O</text>
+      </svg></div>
+      <div class="dirbtns">
+        ${["NO","N","NE","O","","L","SO","S","SE"].map(d=>d?`<div class="btn ${activeSub_windActive(d)}" data-wind="${d}">${d}</div>`:`<div></div>`).join("")}
+      </div>
+      <div class="field" style="margin-top:10px;"><label>Linha do Equador<span class="v">${S.settings.equatorRow}</span></label>
+        <input type="range" id="rng-equator" min="0" max="${GRID_H}" value="${S.settings.equatorRow}"></div>
+      <button class="btn block" id="btn-recalc-wind" style="margin-top:6px;">🌬 Recalcular sombra de chuva</button>
+      <div class="help">O vento carrega umidade do oceano; montanhas bloqueiam o vento e criam desertos a favor do vento (sombra de chuva).</div>
+    </div>`;
+  }
+  if(activeTool==="biome"){
+    html += `<div class="panel-sec"><h4>Pintar Bioma (sobrepõe o clima automático)</h4>
+      <div class="swatches" style="margin-bottom:16px;">
+        ${BIOMES.map(b=>`<div class="swatch ${activeSub.biomePaint===b.id?'active':''}" data-biome="${b.id}" style="background:rgb(${b.color.join(',')})" title="${b.name}"><span class="lbl">${b.name.split(' ')[0]}</span></div>`).join("")}
+      </div>
+      <div class="field"><label>Tamanho do pincel<span class="v">${activeSub.brushSize}</span></label>
+        <input type="range" id="rng-brushsize" min="2" max="30" value="${activeSub.brushSize}"></div>
+      <button class="btn block" id="btn-clear-biome-override">↺ Limpar sobreposições (voltar ao automático)</button>
+      <div class="help">Use para causas mágicas ou sobrenaturais — uma floresta amaldiçoada em pleno deserto, por exemplo.</div>
+    </div>`;
+  }
+  if(activeTool==="rio"){
+    html += `<div class="panel-sec"><h4>Ferramenta de Rios</h4>
+      <div class="grid2">
+        <div class="btn ${activeSub.riverMode==='auto'?'active':''}" data-set="riverMode" data-val="auto">Automático</div>
+        <div class="btn ${activeSub.riverMode==='manual'?'active':''}" data-set="riverMode" data-val="manual">Manual (pontos)</div>
+      </div>
+      <div class="help">No modo automático, clique num ponto alto: o rio flui sozinho até o mar. No modo manual, clique vários pontos (do mais alto ao mais baixo) e pressione Enter ou dê duplo-clique para concluir.</div>
+      <button class="btn block primary" id="btn-auto-rivers" style="margin-top:10px;">🏞 Gerar rede de rios automática</button>
+    </div>`;
+  }
+  if(activeTool==="rota"){
+    html += `<div class="panel-sec"><h4>Rotas de Comércio</h4>
+      <div class="grid2">
+        <div class="btn ${activeSub.routeType==='terrestre'?'active':''}" data-set="routeType" data-val="terrestre">🐎 Terrestre</div>
+        <div class="btn ${activeSub.routeType==='maritima'?'active':''}" data-set="routeType" data-val="maritima">⛵ Marítima</div>
+      </div>
+      <div class="help">Clique na cidade de origem e depois na de destino. O caminho mais econômico é calculado automaticamente, evitando relevo acidentado (ou terra firme, se marítima).</div>
+    </div>`;
+  }
+  if(activeTool==="ativo"){
+    html += `<div class="panel-sec"><h4>Biblioteca de Ativos</h4><div class="asset-lib">`;
+    ASSET_DEFS.forEach(a=>{
+      html += `<div class="asset-item ${activeSub.assetType===a.id&&!activeSub.customAssetId?'active':''}" data-asset="${a.id}" title="${a.name}">
+        <svg viewBox="-16 -16 32 32">${assetSvgInner(a.id)}</svg></div>`;
+    });
+    Object.entries(S.customAssets).forEach(([k,v])=>{
+      html += `<div class="asset-item ${activeSub.customAssetId===k?'active':''}" data-custom="${k}" title="${v.name}"><img src="${v.dataURL}"></div>`;
+    });
+    html += `</div>
+      <button class="btn block" id="btn-upload-asset" style="margin-top:9px;">⬆ Enviar ícone personalizado (.png/.svg)</button>
+      <div class="field" style="margin-top:10px;"><label>Escala<span class="v">${activeSub.assetScale.toFixed(2)}</span></label>
+        <input type="range" id="rng-assetscale" min="0.4" max="2.5" step="0.05" value="${activeSub.assetScale}"></div>
+      <div class="field"><label>Cor <input type="color" id="clr-asset" value="${activeSub.assetColor}"></label></div>
+    </div>`;
+  }
+  if(activeTool==="texto"){
+    html += `<div class="panel-sec"><h4>Tipografia</h4>
+      <div class="field"><input type="text" id="txt-labeltext" value="${activeSub.labelText}" placeholder="Texto do rótulo"></div>
+      <div class="grid2">
+        <div class="btn ${activeSub.labelMode==='reto'?'active':''}" data-set="labelMode" data-val="reto">Reto</div>
+        <div class="btn ${activeSub.labelMode==='curvo'?'active':''}" data-set="labelMode" data-val="curvo">Curvo (rios/cadeias)</div>
+      </div>
+      <div class="field" style="margin-top:10px;"><label>Fonte</label>
+        <select id="sel-font">
+          <option value="Cinzel" ${activeSub.labelFont==='Cinzel'?'selected':''}>Cinzel (medieval)</option>
+          <option value="Spectral" ${activeSub.labelFont==='Spectral'?'selected':''}>Spectral (vintage)</option>
+          <option value="Inter" ${activeSub.labelFont==='Inter'?'selected':''}>Inter (futurista/limpa)</option>
+        </select>
+      </div>
+      <div class="field"><label>Tamanho<span class="v">${activeSub.labelSize}</span></label>
+        <input type="range" id="rng-labelsize" min="9" max="42" value="${activeSub.labelSize}"></div>
+      <div class="field"><label>Cor <input type="color" id="clr-label" value="${activeSub.labelColor}"></label></div>
+      <div class="help">${activeSub.labelMode==='curvo'?'Clique vários pontos ao longo do rio/cordilheira e pressione Enter para aplicar o texto curvo.':'Clique no mapa para posicionar o rótulo.'}</div>
+    </div>`;
+  }
+  if(activeTool==="selecionar"){
+    html += `<div class="panel-sec"><h4>Seleção</h4><div class="help">Clique em qualquer ativo ou rótulo no mapa para abrir suas propriedades (escala, rotação, cor, texto).</div></div>`;
+  }
+  sidebarBody.innerHTML = html;
+  wireToolsPanelEvents();
+}
+function activeSub_windActive(d){ return S.settings.windDir===d?'active':''; }
+function assetSvgInner(type){
+  const map = {
+    montanha:'<path d="M0,-14 11,10 -11,10Z" fill="#c9a24b"/><path d="M0,-14 4,-5 -4,-5Z" fill="#fff"/>',
+    vulcao:'<path d="M0,-14 11,10 -11,10Z" fill="#c9a24b"/><circle cx="1" cy="-17" r="2.6" fill="#e0603a"/>',
+    arvore:'<circle cx="-6" cy="-6" r="6" fill="#6d8c53"/><circle cx="0" cy="-3" r="6" fill="#6d8c53"/><circle cx="6" cy="-6" r="6" fill="#6d8c53"/><rect x="-1.5" y="4" width="3" height="7" fill="#5b4327"/>',
+    palmeira:'<path d="M0,12 Q3,0 0,-8" stroke="#7a5a30" stroke-width="2" fill="none"/><ellipse cx="0" cy="-8" rx="7" ry="2.4" fill="#6d8c53"/>',
+    vila:'<path d="M-6,3 0,-6 6,3Z" fill="#c9a24b"/><rect x="-4" y="3" width="8" height="5" fill="#3a2f1c"/>',
+    cidade:'<rect x="-9.5" y="-2" width="5" height="10" fill="#c9a24b"/><rect x="-2.5" y="-7" width="5" height="15" fill="#c9a24b"/><rect x="4.5" y="-2" width="5" height="10" fill="#c9a24b"/>',
+    castelo:'<rect x="-10" y="-2" width="20" height="12" fill="#c9a24b"/><rect x="-10.5" y="-10" width="5" height="8" fill="#c9a24b"/><rect x="-2.5" y="-10" width="5" height="8" fill="#c9a24b"/><rect x="5.5" y="-10" width="5" height="8" fill="#c9a24b"/>',
+    porto:'<path d="M-7,2 a7,7 0 0 0 14,0" stroke="#c9a24b" stroke-width="2" fill="none"/><path d="M0,-9 0,4 M-4,-6 4,-6" stroke="#c9a24b" stroke-width="2"/>',
+    ruina:'<rect x="-8" y="2" width="4" height="8" fill="#c9a24b"/><rect x="1" y="-4" width="4" height="14" fill="#c9a24b"/><rect x="-2" y="6" width="10" height="3" fill="#c9a24b"/>',
+    torre:'<path d="M-4,10 -3,-8 0,-14 3,-8 4,10Z" fill="#c9a24b"/><circle cx="0" cy="-4" r="2" fill="#8fc4dd"/>',
+    monstro:'<path d="M-10,4 Q-4,-8 0,0 Q4,8 10,-4" stroke="#c9a24b" stroke-width="3" fill="none" stroke-linecap="round"/>',
+    dragao:'<path d="M-9,6 Q0,-14 9,6 Q0,-2 -9,6Z" fill="#c9a24b"/>'
+  };
+  return map[type]||map.cidade;
+}
+function wireToolsPanelEvents(){
+  sidebarBody.querySelectorAll("[data-tool]").forEach(el=> el.onclick=()=>setTool(el.dataset.tool));
+  sidebarBody.querySelectorAll("[data-set]").forEach(el=> el.onclick=()=>{ activeSub[el.dataset.set]=el.dataset.val; renderSidebar(); });
+  sidebarBody.querySelectorAll("[data-biome]").forEach(el=> el.onclick=()=>{ activeSub.biomePaint=parseInt(el.dataset.biome); renderSidebar(); });
+  sidebarBody.querySelectorAll("[data-asset]").forEach(el=> el.onclick=()=>{ activeSub.assetType=el.dataset.asset; activeSub.customAssetId=null; renderSidebar(); });
+  sidebarBody.querySelectorAll("[data-custom]").forEach(el=> el.onclick=()=>{ activeSub.customAssetId=el.dataset.custom; renderSidebar(); });
+  sidebarBody.querySelectorAll("[data-wind]").forEach(el=> el.onclick=()=>{ S.settings.windDir=el.dataset.wind; computeWindMoisture(); pushHistory("Alterar vento"); renderSidebar(); });
+  const bs=document.getElementById("rng-brushsize"); if(bs) bs.oninput=(e)=>{ activeSub.brushSize=parseInt(e.target.value); sidebarBody.querySelectorAll('label span.v')[0].textContent=e.target.value; };
+  const bstr=document.getElementById("rng-brushstrength"); if(bstr) bstr.oninput=(e)=>{ activeSub.brushStrength=parseFloat(e.target.value); e.target.previousElementSibling ? null:null; renderLiveLabels(); };
+  const eqr=document.getElementById("rng-equator"); if(eqr) eqr.oninput=(e)=>{ S.settings.equatorRow=parseInt(e.target.value); renderLiveLabels(); };
+  const btnWind=document.getElementById("btn-recalc-wind"); if(btnWind) btnWind.onclick=()=>{ computeWindMoisture(); pushHistory("Recalcular vento"); };
+  const erIt=document.getElementById("rng-erosion-it"); if(erIt) erIt.oninput=(e)=>{ document.getElementById("lbl-erosion-it").textContent=e.target.value; };
+  const erStr=document.getElementById("rng-erosion-str"); if(erStr) erStr.oninput=(e)=>{ document.getElementById("lbl-erosion-str").textContent=parseFloat(e.target.value).toFixed(2); };
+  const btnEro=document.getElementById("btn-run-erosion"); if(btnEro) btnEro.onclick=()=>{
+    const it=parseInt(document.getElementById("rng-erosion-it").value), st=parseFloat(document.getElementById("rng-erosion-str").value);
+    runErosion(it,st); toast("Erosão simulada.");
+  };
+  const btnClearBiome=document.getElementById("btn-clear-biome-override"); if(btnClearBiome) btnClearBiome.onclick=()=>{ S.biomeOverride.fill(-1); pushHistory("Limpar biomas manuais"); scheduleRenderAll(); };
+  const btnAutoRiv=document.getElementById("btn-auto-rivers"); if(btnAutoRiv) btnAutoRiv.onclick=()=>{ autoGenerateRivers(7); toast("Rede de rios gerada."); };
+  const upl=document.getElementById("btn-upload-asset"); if(upl) upl.onclick=()=> document.getElementById("file-import-asset").click();
+  const assetScale=document.getElementById("rng-assetscale"); if(assetScale) assetScale.oninput=(e)=>{ activeSub.assetScale=parseFloat(e.target.value); };
+  const assetColor=document.getElementById("clr-asset"); if(assetColor) assetColor.oninput=(e)=>{ activeSub.assetColor=e.target.value; };
+  const txtLbl=document.getElementById("txt-labeltext"); if(txtLbl) txtLbl.oninput=(e)=>{ activeSub.labelText=e.target.value; };
+  const selFont=document.getElementById("sel-font"); if(selFont) selFont.onchange=(e)=>{ activeSub.labelFont=e.target.value; };
+  const rngLblSize=document.getElementById("rng-labelsize"); if(rngLblSize) rngLblSize.oninput=(e)=>{ activeSub.labelSize=parseInt(e.target.value); };
+  const clrLabel=document.getElementById("clr-label"); if(clrLabel) clrLabel.oninput=(e)=>{ activeSub.labelColor=e.target.value; };
+}
+function renderLiveLabels(){ /* atualiza valores exibidos sem re-render completo do painel */ }
+
+function renderLayersPanel(){
+  const rows = [
+    ["terrain","Terreno / Biomas"], ["political","Fronteiras Políticas"], ["rivers","Rios"], ["routes","Rotas Comerciais"],
+    ["grid","Grade"], ["assets","Ativos"], ["labels","Rótulos"]
+  ];
+  let html = `<div class="panel-sec"><h4>Camadas Visíveis</h4>`;
+  rows.forEach(([k,label])=>{
+    html += `<div class="layer-row"><span class="nm">${label}</span><div class="toggle ${layerVisible[k]?'on':''}" data-layer="${k}"><div class="knob"></div></div></div>`;
+  });
+  html += `</div>
+  <div class="panel-sec"><h4>Preenchimento Político</h4>
+    <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="chk-resprios" ${S.settings.respectRivers?'checked':''}> Rios delimitam fronteiras</label></div>
+    <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="chk-respmont" ${S.settings.respectMountains?'checked':''}> Montanhas delimitam fronteiras</label></div>
+    <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="chk-overwrite" ${S.settings.overwritePolitical?'checked':''}> Permitir sobrescrever território de outro reino</label></div>
+  </div>`;
+  sidebarBody.innerHTML = html;
+  sidebarBody.querySelectorAll("[data-layer]").forEach(el=>{
+    el.onclick=()=>{ const k=el.dataset.layer; layerVisible[k]=!layerVisible[k]; el.classList.toggle("on"); applyLayerVisibility(); scheduleRenderVector(); };
+  });
+  document.getElementById("chk-resprios").onchange=(e)=>{ S.settings.respectRivers=e.target.checked; };
+  document.getElementById("chk-respmont").onchange=(e)=>{ S.settings.respectMountains=e.target.checked; };
+  document.getElementById("chk-overwrite").onchange=(e)=>{ S.settings.overwritePolitical=e.target.checked; };
+}
+
+function renderKingdomsPanel(){
+  let html = `<div class="panel-sec"><h4>Reinos e Facções</h4>`;
+  if(S.kingdoms.length===0) html += `<div class="help">Nenhum reino criado ainda. Adicione um abaixo para começar a desenhar fronteiras.</div>`;
+  S.kingdoms.forEach((k,i)=>{
+    html += `<div class="kingdom-row ${activeSub.kingdomActive===i?'active':''}" data-kingdom="${i}">
+      <div class="dot" style="background:${k.color}"></div><span class="name">${k.name}</span><span class="del" data-delkingdom="${i}">✕</span></div>`;
+  });
+  html += `</div>
+  <div class="panel-sec"><h4>Novo Reino</h4>
+    <div class="row"><input type="text" id="txt-newkingdom" placeholder="Nome do reino"><input type="color" id="clr-newkingdom" value="${randomColor()}"></div>
+    <button class="btn block" id="btn-addkingdom" style="margin-top:8px;">+ Adicionar Reino</button>
+  </div>`;
+  sidebarBody.innerHTML = html;
+  sidebarBody.querySelectorAll("[data-kingdom]").forEach(el=> el.onclick=(e)=>{ if(e.target.dataset.delkingdom!==undefined && e.target.classList.contains('del')) return; activeSub.kingdomActive=parseInt(el.dataset.kingdom); setTool("politica"); });
+  sidebarBody.querySelectorAll("[data-delkingdom]").forEach(el=> el.onclick=(e)=>{ e.stopPropagation(); const idx=parseInt(el.dataset.delkingdom); S.kingdoms.splice(idx,1); for(let i=0;i<S.political.length;i++) if(S.political[i]===idx) S.political[i]=-1; pushHistory("Remover reino"); scheduleRenderAll(); renderKingdomsPanel(); });
+  document.getElementById("btn-addkingdom").onclick=()=>{
+    const name=document.getElementById("txt-newkingdom").value.trim()||"Reino Sem Nome";
+    const color=document.getElementById("clr-newkingdom").value;
+    S.kingdoms.push({name,color}); activeSub.kingdomActive=S.kingdoms.length-1;
+    pushHistory("Novo reino"); renderKingdomsPanel();
+  };
+}
+function randomColor(){ const c=["#a8542f","#4a8577","#7e6a3f","#5c6b8f","#8a4a6b","#3f7a52","#a68a3f"]; return c[Math.floor(Math.random()*c.length)]; }
+
+function renderTimelinePanel(){
+  let html = `<div class="panel-sec"><h4>Linha do Tempo</h4>
+    <div class="row"><input type="text" id="txt-eraname" placeholder="Nome da era (ex: Ascensão do Império)"></div>
+    <div class="row" style="margin-top:6px;"><input type="number" id="num-erayear" placeholder="Ano" style="flex:1"></div>
+    <button class="btn block primary" id="btn-saveera" style="margin-top:8px;">📌 Salvar versão histórica atual</button>
+  </div>
+  <div class="panel-sec"><h4>Épocas Salvas</h4>`;
+  if(S.timeline.length===0) html += `<div class="help">Nenhuma era salva. Esculpa seu mundo e registre seus momentos históricos aqui — depois é possível avançar ou retroceder séculos.</div>`;
+  S.timeline.slice().sort((a,b)=>a.year-b.year).forEach(era=>{
+    html += `<div class="era-row" data-era="${era.id}"><div class="yr">Ano ${era.year}</div><div class="nm">${era.name}</div></div>`;
+  });
+  html += `</div>`;
+  sidebarBody.innerHTML = html;
+  document.getElementById("btn-saveera").onclick=()=>{
+    const name = document.getElementById("txt-eraname").value.trim()||"Era sem nome";
+    const year = parseInt(document.getElementById("num-erayear").value)||0;
+    S.timeline.push({id:S.nextId++, name, year, snapshot: serializeState(S)});
+    document.getElementById("status-era").textContent = name;
+    pushHistory("Salvar era"); renderTimelinePanel(); toast("Era \""+name+"\" registrada na linha do tempo.");
+  };
+  sidebarBody.querySelectorAll("[data-era]").forEach(el=> el.onclick=()=>{
+    const era = S.timeline.find(x=>x.id===parseInt(el.dataset.era));
+    if(!era) return;
+    const currentTimeline = S.timeline, currentName=S.name;
+    S = deserializeState(era.snapshot);
+    S.timeline = currentTimeline; // preserva a linha do tempo completa
+    document.getElementById("status-era").textContent = era.name+" ("+era.year+")";
+    scheduleRenderAll(); refreshAllUI();
+    toast("Visualizando: "+era.name);
+  });
+}
+
+function renderMapPanel(){
+  let html = `<div class="panel-sec"><h4>Identidade do Mapa</h4>
+    <div class="field"><input type="text" id="txt-mapname" value="${S.name}"></div>
+  </div>
+  <div class="panel-sec"><h4>Nível do Mar</h4>
+    <div class="field"><label>Elevação do nível do mar<span class="v">${S.settings.seaLevel.toFixed(2)}</span></label>
+      <input type="range" id="rng-sealevel" min="0.2" max="0.75" step="0.01" value="${S.settings.seaLevel}"></div>
+  </div>
+  <div class="panel-sec"><h4>Escala Dinâmica</h4>
+    <div class="field"><label>Quilômetros por célula<span class="v">${S.settings.kmPerCell}</span></label>
+      <input type="range" id="rng-kmpercell" min="1" max="80" value="${S.settings.kmPerCell}"></div>
+    <div class="field"><label>Unidade exibida</label>
+      <select id="sel-scaleunit">
+        <option value="km" ${S.settings.scaleUnit==='km'?'selected':''}>Quilômetros</option>
+        <option value="mi" ${S.settings.scaleUnit==='mi'?'selected':''}>Milhas</option>
+        <option value="dias" ${S.settings.scaleUnit==='dias'?'selected':''}>Dias de viagem a cavalo</option>
+      </select>
+    </div>
+  </div>
+  <div class="panel-sec"><h4>Grade (Grid)</h4>
+    <div class="grid3">
+      <div class="btn ${S.settings.gridType==='none'?'active':''}" data-grid="none">Nenhuma</div>
+      <div class="btn ${S.settings.gridType==='square'?'active':''}" data-grid="square">Quadrada</div>
+      <div class="btn ${S.settings.gridType==='hex'?'active':''}" data-grid="hex">Hexagonal</div>
+      <div class="btn ${S.settings.gridType==='latlong'?'active':''}" data-grid="latlong" style="grid-column:span 3;">Latitude / Longitude</div>
+    </div>
+    <div class="field" style="margin-top:9px;"><label>Espaçamento<span class="v">${S.settings.gridSpacing}</span></label>
+      <input type="range" id="rng-gridspacing" min="3" max="30" value="${S.settings.gridSpacing}"></div>
+    <div class="field"><label>Opacidade<span class="v">${S.settings.gridOpacity.toFixed(2)}</span></label>
+      <input type="range" id="rng-gridopacity" min="0.05" max="1" step="0.05" value="${S.settings.gridOpacity}"></div>
+    <div class="field"><label style="display:flex;align-items:center;gap:8px;"><input type="checkbox" id="chk-snapgrid" ${S.settings.snapGrid?'checked':''}> Encaixe magnético (snapping)</label></div>
+  </div>
+  <div class="panel-sec"><h4>Semente do Mundo</h4>
+    <div class="row"><input type="number" id="num-seed" value="${S.seed}"><button class="btn" id="btn-randseed">🎲</button></div>
+    <div class="help">A mesma semente sempre gera o mesmo terreno — útil para reproduzir ou compartilhar um mundo.</div>
+  </div>`;
+  sidebarBody.innerHTML = html;
+  document.getElementById("txt-mapname").oninput=(e)=>{ S.name=e.target.value; };
+  document.getElementById("rng-sealevel").oninput=(e)=>{ S.settings.seaLevel=parseFloat(e.target.value); scheduleRenderAll(); };
+  document.getElementById("rng-kmpercell").oninput=(e)=>{ S.settings.kmPerCell=parseInt(e.target.value); updateScaleBar(); };
+  document.getElementById("sel-scaleunit").onchange=(e)=>{ S.settings.scaleUnit=e.target.value; updateScaleBar(); };
+  sidebarBody.querySelectorAll("[data-grid]").forEach(el=> el.onclick=()=>{ S.settings.gridType=el.dataset.grid; document.getElementById("bb-grid").textContent = el.dataset.grid==="none"?"Desligada":el.textContent; scheduleRenderVector(); renderMapPanel(); });
+  document.getElementById("rng-gridspacing").oninput=(e)=>{ S.settings.gridSpacing=parseInt(e.target.value); scheduleRenderVector(); };
+  document.getElementById("rng-gridopacity").oninput=(e)=>{ S.settings.gridOpacity=parseFloat(e.target.value); scheduleRenderVector(); };
+  document.getElementById("chk-snapgrid").onchange=(e)=>{ S.settings.snapGrid=e.target.checked; };
+  document.getElementById("btn-randseed").onclick=()=>{ S.seed=Math.floor(Math.random()*99999); document.getElementById("num-seed").value=S.seed; };
+  document.getElementById("num-seed").onchange=(e)=>{ S.seed=parseInt(e.target.value)||0; };
+}
+
+function refreshAllUI(){
+  renderSidebar();
+  document.getElementById("bb-grid").textContent = S.settings.gridType==="none"?"Desligada":S.settings.gridType;
+  applyLayerVisibility();
+  updateScaleBar();
+}
+
+/* ---------------------------------------------------------------------------------------
+   18. TOASTS / MODAL
+--------------------------------------------------------------------------------------- */
+function toast(msg){
+  const wrap = document.getElementById("toast-wrap");
+  const t = document.createElement("div"); t.className="toast"; t.textContent=msg;
+  wrap.appendChild(t);
+  setTimeout(()=>{ t.style.opacity="0"; t.style.transition=".3s"; setTimeout(()=>t.remove(),300); }, 2600);
+}
+function confirmModal(title, onYes){
+  const ov = document.createElement("div"); ov.id="modal-overlay";
+  ov.innerHTML = `<div id="modal-box"><h3>${title}</h3><div class="actions">
+    <button class="btn" id="modal-no">Cancelar</button><button class="btn danger" id="modal-yes">Confirmar</button></div></div>`;
+  document.body.appendChild(ov);
+  document.getElementById("modal-no").onclick=()=>ov.remove();
+  document.getElementById("modal-yes").onclick=()=>{ ov.remove(); onYes(); };
+}
+
+/* ---------------------------------------------------------------------------------------
+   19. LIGAÇÃO DA TOPBAR
+--------------------------------------------------------------------------------------- */
+function toggleMenu(id){
+  document.querySelectorAll(".menu-drop").forEach(m=>{ if(m.id!==id) m.classList.add("hidden"); });
+  document.getElementById(id).classList.toggle("hidden");
+}
+document.getElementById("btn-file-menu").onclick=(e)=>{ e.stopPropagation(); toggleMenu("menu-file"); };
+document.getElementById("btn-gen-menu").onclick=(e)=>{ e.stopPropagation(); toggleMenu("menu-gen"); };
+document.addEventListener("click",()=> document.querySelectorAll(".menu-drop").forEach(m=>m.classList.add("hidden")));
+
+document.getElementById("m-new").onclick=()=> confirmModal("Criar um novo mapa? Alterações não salvas no cache serão perdidas.", ()=>{
+  S=freshState(); historyStack=[snapshotState()]; historyIdx=0; scheduleRenderAll(); refreshAllUI(); toast("Novo mapa criado.");
+});
+document.getElementById("m-save-cache").onclick=saveToCache;
+document.getElementById("m-load-cache").onclick=()=>loadFromCache(false);
+document.getElementById("m-export-json").onclick=exportProjectJSON;
+document.getElementById("m-import-json").onclick=()=> document.getElementById("file-import-json").click();
+document.getElementById("m-export-png").onclick=exportPNG;
+document.getElementById("m-export-svg").onclick=exportSVG;
+document.getElementById("m-export-tiles").onclick=()=> exportTilesVTT(512,4);
+
+document.getElementById("file-import-json").onchange=(e)=>{ if(e.target.files[0]) importProjectJSON(e.target.files[0]); e.target.value=""; };
+document.getElementById("file-import-asset").onchange=(e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const reader=new FileReader();
+  reader.onload=(ev)=>{
+    const id="custom_"+(S.nextId++);
+    S.customAssets[id]={name:f.name, dataURL:ev.target.result, kind:f.type.includes("svg")?"svg":"png"};
+    hydrateCustomAssetImages(S);
+    activeSub.customAssetId=id;
+    pushHistory("Enviar ativo personalizado");
+    renderSidebar();
+    toast("Ícone personalizado adicionado à biblioteca.");
+  };
+  reader.readAsDataURL(f);
+  e.target.value="";
+};
+
+document.getElementById("g-continent").onclick=()=>{ generateContinent("continent"); toast("Continente gerado."); };
+document.getElementById("g-archipelago").onclick=()=>{ generateContinent("archipelago"); toast("Arquipélago gerado."); };
+document.getElementById("g-voronoi").onclick=()=>{ generateContinent("voronoi"); toast("Ilhas por Voronoi geradas."); };
+document.getElementById("g-clear").onclick=()=> confirmModal("Limpar todo o terreno para o nível do mar?", clearTerrain);
+
+document.getElementById("btn-theme").onclick=()=>{
+  const cur = document.body.getAttribute("data-theme");
+  const next = cur==="dark"?"light":"dark";
+  document.body.setAttribute("data-theme", next);
+  S.settings.theme=next; scheduleAutosave();
+};
+document.getElementById("btn-sidebar-toggle").onclick=()=> document.getElementById("sidebar").classList.toggle("collapsed");
+
+document.querySelectorAll(".stab").forEach(tab=>{
+  tab.onclick=()=>{ document.querySelectorAll(".stab").forEach(t=>t.classList.remove("active")); tab.classList.add("active"); currentTab=tab.dataset.tab; renderSidebar(); };
+});
+
+window.addEventListener("resize", ()=>{});
+
+/* ---------------------------------------------------------------------------------------
+   20. INICIALIZAÇÃO
+--------------------------------------------------------------------------------------- */
+async function init(){
+  applyView();
+  const loaded = await loadFromCache(true);
+  if(!loaded){ generateContinent("continent"); }
+  else { scheduleRenderAll(); }
+  historyStack=[snapshotState()]; historyIdx=0;
+  refreshAllUI();
+  setTool("elev");
+  setTimeout(centerView, 60);
+  setTimeout(()=>{ document.getElementById("veil").style.opacity="0"; setTimeout(()=>document.getElementById("veil").remove(),450); }, 500);
+}
+init();
+
+})();
+</script>
+</body>
+</html>
